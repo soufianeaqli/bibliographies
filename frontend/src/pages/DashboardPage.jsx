@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import FormField from '../components/FormField';
 import Spinner from '../components/Spinner';
 import { extraireErreurs } from '../utils/erreurs';
+import { Link } from 'react-router-dom';
 
 export default function DashboardPage() {
   const { utilisateur, logout, updateProfile } = useAuth();
@@ -48,7 +49,12 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-gray-50">
       <header className="border-b border-gray-200 bg-white">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
-          <span className="text-sm font-semibold text-gray-900">Références bibliographiques</span>
+          <div className="flex items-center space-x-6">
+            <span className="text-sm font-semibold text-gray-900">Application PFE</span>
+            <Link to="/references" className="text-sm text-gray-600 hover:text-gray-900 hover:underline">
+              Mes Références
+            </Link>
+          </div>
           <button
             onClick={seDeconnecter}
             disabled={deconnexionEnCours}
