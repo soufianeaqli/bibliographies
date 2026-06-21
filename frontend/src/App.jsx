@@ -1,12 +1,12 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
-import DashboardPage from './pages/DashboardPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import PublicOnlyRoute from './components/PublicOnlyRoute';
-import ReferencesPage from './pages/ReferencesPage';
-import ReferenceDetailPage from './pages/ReferenceDetailPage';
-import ReferenceFormPage from './pages/ReferenceFormPage';
+import LibraryLayout from './components/LibraryLayout';
+import LibraryDashboard from './pages/LibraryDashboard';
+import BookReaderPage from './pages/BookReaderPage';
+import { Accueil, Categories, Favoris, Historiques, Notes, Recommandations, Profil, Parametres } from './pages/LibrarySubPages';
 
 export default function App() {
   return (
@@ -27,48 +27,24 @@ export default function App() {
           </PublicOnlyRoute>
         }
       />
-      <Route
-        path="/dashboard"
-        element={
-          <ProtectedRoute>
-            <DashboardPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/references"
-        element={
-          <ProtectedRoute>
-            <ReferencesPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/references/new"
-        element={
-          <ProtectedRoute>
-            <ReferenceFormPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/references/:id"
-        element={
-          <ProtectedRoute>
-            <ReferenceDetailPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/references/:id/edit"
-        element={
-          <ProtectedRoute>
-            <ReferenceFormPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      
+      <Route path="/bibliotheque" element={<ProtectedRoute><LibraryLayout /></ProtectedRoute>}>
+        <Route index element={<Accueil />} />
+        <Route path="livres" element={<LibraryDashboard />} />
+        <Route path="categories" element={<Categories />} />
+        <Route path="favoris" element={<Favoris />} />
+        <Route path="historique" element={<Historiques />} />
+        <Route path="notes" element={<Notes />} />
+        <Route path="recommandations" element={<Recommandations />} />
+        <Route path="profil" element={<Profil />} />
+        <Route path="parametres" element={<Parametres />} />
+      </Route>
+
+      {/* Reader 3D (Plein ecran) */}
+      <Route path="/reader" element={<ProtectedRoute><BookReaderPage /></ProtectedRoute>} />
+
+      <Route path="/" element={<Navigate to="/bibliotheque" replace />} />
+      <Route path="*" element={<Navigate to="/bibliotheque" replace />} />
     </Routes>
   );
 }

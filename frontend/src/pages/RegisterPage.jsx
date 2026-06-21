@@ -26,7 +26,7 @@ export default function RegisterPage() {
 
     try {
       await register({ nom, email, motDePasse, motDePasseConfirmation });
-      navigate('/dashboard', { replace: true });
+      navigate('/bibliotheque', { replace: true });
     } catch (error) {
       const { message, champs: erreursChamps } = extraireErreurs(error);
       setChamps(erreursChamps);

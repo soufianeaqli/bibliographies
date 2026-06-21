@@ -12,7 +12,7 @@ export default function FormField({
 }) {
   return (
     <div>
-      <label htmlFor={id} className="mb-1.5 block text-sm font-medium text-gray-700">
+      <label htmlFor={id} className="mb-1.5 block text-sm font-bold text-gray-300">
         {label}
       </label>
       <input
@@ -24,13 +24,13 @@ export default function FormField({
         autoComplete={autoComplete}
         placeholder={placeholder}
         required={required}
-        className={`w-full rounded-md border px-3 py-2 text-sm text-gray-900 placeholder-gray-400 outline-none transition focus:ring-2 ${
+        className={`w-full rounded-lg border bg-[#1C1A17] px-4 py-2.5 text-sm text-white placeholder-gray-500 outline-none transition focus:ring-0 ${
           erreur
-            ? 'border-red-400 focus:border-red-400 focus:ring-red-100'
-            : 'border-gray-300 focus:border-gray-400 focus:ring-gray-100'
+            ? 'border-red-500 focus:border-red-500'
+            : 'border-[#2C261A] focus:border-[#D4AF37]/50 focus:bg-[#23201D]'
         }`}
       />
-      {erreur && <p className="mt-1.5 text-sm text-red-600">{erreur}</p>}
+      {erreur && <p className="mt-1.5 text-xs text-red-500">{erreur}</p>}
     </div>
   );
 }

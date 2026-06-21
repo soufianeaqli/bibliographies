@@ -24,7 +24,7 @@ export default function LoginPage() {
 
     try {
       await login(email, motDePasse);
-      navigate('/dashboard', { replace: true });
+      navigate('/bibliotheque', { replace: true });
     } catch (error) {
       const { message, champs: erreursChamps } = extraireErreurs(error);
       setChamps(erreursChamps);
@@ -39,17 +39,17 @@ export default function LoginPage() {
       titre="Connexion"
       sousTitre="Connectez-vous pour accéder à vos références."
       pied={
-        <>
+        <div className="text-gray-400">
           Pas encore de compte ?{' '}
-          <Link to="/register" className="font-medium text-gray-900 underline underline-offset-2 hover:text-gray-600">
+          <Link to="/register" className="font-bold text-[#D4AF37] hover:text-white transition-colors underline-offset-4 hover:underline">
             Créer un compte
           </Link>
-        </>
+        </div>
       }
     >
       <form onSubmit={soumettre} className="space-y-4" noValidate>
         {messageGlobal && (
-          <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <div className="rounded-md border border-red-500/50 bg-red-900/20 px-4 py-3 text-sm text-red-400">
             {messageGlobal}
           </div>
         )}
@@ -81,10 +81,10 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={enCours}
-          className="flex w-full items-center justify-center gap-2 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#D4AF37] px-4 py-3 text-sm font-bold text-black transition-colors hover:bg-white shadow-[0_0_15px_rgba(212,175,55,0.3)] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {enCours && <Spinner className="h-4 w-4" />}
-          {enCours ? 'Connexion…' : 'Se connecter'}
+          {enCours ? 'Accès en cours…' : 'Accéder à la Bibliothèque'}
         </button>
       </form>
     </AuthLayout>

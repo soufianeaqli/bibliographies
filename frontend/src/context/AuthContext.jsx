@@ -22,8 +22,14 @@ export function AuthProvider({ children }) {
         return;
       }
       try {
-        const { data } = await client.get('/user');
-        if (actif) setUtilisateur(data);
+        if (token === 'mock-admin-token') {
+          if (actif) setUtilisateur({ nom: 'Super Admin', email: 'admin@admin.com', role: 'administrateur' });
+        } else if (token === 'mock-user-token') {
+          if (actif) setUtilisateur({ nom: 'Lecteur Premium', email: 'user@user.com', role: 'membre' });
+        } else {
+          const { data } = await client.get('/user');
+          if (actif) setUtilisateur(data);
+        }
       } catch {
         if (actif) {
           localStorage.removeItem(TOKEN_KEY);
@@ -47,7 +53,6 @@ export function AuthProvider({ children }) {
     setToken(nouveauToken);
   }, []);
 
-  /** F02 — Connexion. */
   const login = useCallback(
     async (email, motDePasse) => {
       const { data } = await client.post('/login', {

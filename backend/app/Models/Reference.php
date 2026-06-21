@@ -39,6 +39,16 @@ class Reference extends Model
         'type',
         'date_creation',
         'utilisateur_id',
+        'description',
+        'cover_image',
+        'pdf_path',
+        'epub_path',
+        'audio_path',
+        'video_url',
+        'is_featured',
+        'is_archived',
+        'rating',
+        'total_pages',
     ];
 
     protected function casts(): array

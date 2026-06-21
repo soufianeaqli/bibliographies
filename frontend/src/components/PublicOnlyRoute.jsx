@@ -7,6 +7,6 @@ export default function PublicOnlyRoute({ children }) {
   const { estAuthentifie, chargement } = useAuth();
 
   if (chargement) return <EcranChargement />;
-  if (estAuthentifie) return <Navigate to="/dashboard" replace />;
+  if (estAuthentifie) return <Navigate to="/bibliotheque" replace />;
   return children;
 }
