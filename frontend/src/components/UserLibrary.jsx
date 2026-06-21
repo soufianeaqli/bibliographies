@@ -1,20 +1,40 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Bookmark, Search, Bell, Sparkles, MessageSquare, Flame, Trophy, PlayCircle, Headphones, Star, ChevronRight, BookOpen, Send, Clock, Book } from 'lucide-react';
 import { fetchBooks } from '../api/libraryClient';
 
-export default function UserLibrary({ recommendations = [] }) {
+export default function UserLibrary() {
+  const navigate = useNavigate();
   const [readingProgress, setReadingProgress] = useState(45);
   const [activeFilter, setActiveFilter] = useState('All');
+  const [searchQuery, setSearchQuery] = useState('');
   const [chatInput, setChatInput] = useState('');
   const [books, setBooks] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [chatMessages, setChatMessages] = useState([
     { text: "Bonjour ! Quel livre allez-vous dévorer aujourd'hui ?", isBot: true }
   ]);
 
   useEffect(() => {
-      fetchBooks().then(setBooks).catch(console.error);
+      fetchBooks()
+        .then(setBooks)
+        .catch(console.error)
+        .finally(() => setLoading(false));
   }, []);
+
+  const filteredBooks = books.filter(book => {
+    const matchesSearch = !searchQuery ||
+      book.titre?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      book.auteur?.toLowerCase().includes(searchQuery.toLowerCase());
+
+    const matchesFilter = activeFilter === 'All' ||
+      (activeFilter === 'Audiobooks' && book.audio_path) ||
+      (activeFilter === 'Nouveautés') ||
+      (activeFilter === 'Science-Fiction') ||
+      (activeFilter === 'Histoire');
+
+    return matchesSearch && matchesFilter;
+  });
 
   const handleChat = (e) => {
     e.preventDefault();
@@ -39,6 +59,8 @@ export default function UserLibrary({ recommendations = [] }) {
               <Search className="w-8 h-8 text-[#D4AF37]" />
               <input 
                 type="text" 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Discutez avec l'IA ou recherchez par Titre, Auteur, Catégorie..." 
                 className="w-full bg-transparent text-white placeholder-[#D4AF37]/50 ml-6 focus:outline-none font-bold text-lg"
               />
@@ -78,11 +100,25 @@ export default function UserLibrary({ recommendations = [] }) {
             </div>
             
             <div className="flex gap-8 overflow-x-auto pb-8 pt-4 custom-scrollbar px-4 -mx-4 items-center">
-              {books.slice(0, 4).map((book, idx) => (
+              {loading && Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="w-48 shrink-0 animate-pulse">
+                  <div className="aspect-[2/3] bg-[#2C261A] rounded-lg mb-4"></div>
+                  <div className="h-4 bg-[#2C261A] rounded w-3/4 mb-2"></div>
+                  <div className="h-3 bg-[#2C261A] rounded w-1/2"></div>
+                </div>
+              ))}
+              {!loading && filteredBooks.length === 0 && (
+                <div className="w-full text-center py-16">
+                  <BookOpen className="w-16 h-16 text-[#D4AF37] mx-auto mb-4" />
+                  <p className="text-gray-500 text-lg">Aucun livre trouvé.</p>
+                  {searchQuery && <p className="text-gray-600 text-sm mt-2">Essayez un autre terme de recherche.</p>}
+                </div>
+              )}
+              {!loading && filteredBooks.slice(0, 4).map((book, idx) => (
                 <div key={`trend-${idx}`} className="w-48 shrink-0 group perspective-1000">
+                  <div onClick={() => navigate(`/book/${book.id}`)} className="block cursor-pointer">
                   <div className="relative rounded-lg mb-4 aspect-[2/3] transform-style-3d group-hover:rotate-y-12 transition-all duration-700 shadow-[20px_20px_30px_rgba(0,0,0,0.8)] border border-[#2C261A] group-hover:border-[#D4AF37]/50 group-hover:shadow-[0_0_40px_rgba(212,175,55,0.4)]">
                     
-                    {/* Spine Effect */}
                     <div className="absolute top-0 bottom-0 left-0 w-2 bg-gradient-to-r from-black/80 to-transparent z-10"></div>
                     
                     {book.cover_image 
@@ -92,23 +128,17 @@ export default function UserLibrary({ recommendations = [] }) {
                     
                     <div className="absolute inset-0 bg-gradient-to-t from-[#0E0C0A] via-transparent to-transparent opacity-80"></div>
                     
-                    {/* Floating Info inside Book Card on Hover */}
-                    <div className="absolute inset-0 bg-[#0E0C0A]/80 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-500 flex flex-col justify-center items-center gap-4 p-4 rounded-lg">
-                       <Link to="/reader" className="w-full flex items-center justify-center gap-2 py-3 bg-[#D4AF37] text-black font-black uppercase tracking-widest text-xs rounded shadow-[0_0_20px_rgba(212,175,55,0.6)] hover:bg-white hover:scale-105 transition-all">
-                         <BookOpen className="w-4 h-4"/> 3D Read
-                       </Link>
-                       {book.audio_path && (
-                         <button className="w-full flex items-center justify-center gap-2 py-2 border-2 border-white/20 text-white font-bold uppercase tracking-widest text-[10px] rounded hover:border-white transition-all">
-                           <Headphones className="w-3 h-3"/> Extrait
-                         </button>
-                       )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#0E0C0A]/90 via-[#0E0C0A]/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 flex flex-col justify-end items-start gap-2 p-4 rounded-lg">
+                       <p className="text-[#D4AF37] text-xs font-bold uppercase tracking-widest">Voir détails →</p>
                     </div>
-                    {/* Bookmark Badge */}
-                    <button className="absolute top-0 right-4 translate-y-[-10px] group-hover:translate-y-0 text-gray-500 hover:text-[#D4AF37] transition-all opacity-0 group-hover:opacity-100">
+                    <button onClick={e => { e.preventDefault(); e.stopPropagation(); }} className="absolute top-0 right-4 translate-y-[-10px] group-hover:translate-y-0 text-gray-500 hover:text-[#D4AF37] transition-all opacity-0 group-hover:opacity-100">
                       <Bookmark className="w-8 h-8 fill-current" />
                     </button>
                   </div>
-                  <h3 className="text-lg font-bold text-white truncate group-hover:text-[#D4AF37] transition-colors">{book.titre}</h3>
+                  </div>
+                  <div onClick={() => navigate(`/book/${book.id}`)} className="block cursor-pointer">
+                    <h3 className="text-lg font-bold text-white truncate group-hover:text-[#D4AF37] transition-colors">{book.titre}</h3>
+                  </div>
                   <p className="text-sm text-gray-400 truncate font-medium">{book.auteur}</p>
                 </div>
               ))}
@@ -122,29 +152,42 @@ export default function UserLibrary({ recommendations = [] }) {
                  <Sparkles className="w-8 h-8 text-purple-400" /> Recommandé Pour Vous
               </h2>
             </div>
-             <div className="flex gap-6 overflow-x-auto pb-4 custom-scrollbar">
-              {books.slice(4, 10).map((book, idx) => (
-                <div key={`ai-${idx}`} className="w-80 shrink-0 group">
-                  <div className="flex bg-[#14120E] border border-transparent group-hover:border-purple-500/50 rounded-xl overflow-hidden shadow-xl group-hover:shadow-[0_0_30px_rgba(147,51,234,0.2)] transition-all">
-                    <div className="w-32 h-44 shrink-0 shadow-[10px_0_15px_rgba(0,0,0,0.5)] z-10 border-r border-[#2C261A] overflow-hidden">
-                       {book.cover_image 
-                         ? <img src={book.cover_image} alt={book.titre} className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-700" />
-                         : <div className="w-full h-full bg-[#1C1812] flex items-center justify-center text-xs text-gray-500 p-2 text-center font-bold">{book.titre}</div>
-                       }
+              <div className="flex gap-6 overflow-x-auto pb-4 custom-scrollbar">
+               {loading && Array.from({ length: 3 }).map((_, i) => (
+                 <div key={i} className="w-80 shrink-0 animate-pulse">
+                   <div className="flex bg-[#14120E] border border-[#2C261A] rounded-xl overflow-hidden">
+                     <div className="w-32 h-44 bg-[#2C261A]"></div>
+                     <div className="p-4 flex-1 space-y-3">
+                       <div className="h-4 bg-[#2C261A] rounded w-3/4"></div>
+                       <div className="h-3 bg-[#2C261A] rounded w-1/2"></div>
+                       <div className="h-8 bg-[#2C261A] rounded w-full mt-4"></div>
+                     </div>
+                   </div>
+                 </div>
+               ))}
+                 {!loading && filteredBooks.slice(4, 10).map((book, idx) => (
+                  <div key={`ai-${idx}`} className="w-80 shrink-0 group">
+                    <div onClick={() => navigate(`/book/${book.id}`)} className="block cursor-pointer">
+                    <div className="flex bg-[#14120E] border border-transparent group-hover:border-purple-500/50 rounded-xl overflow-hidden shadow-xl group-hover:shadow-[0_0_30px_rgba(147,51,234,0.2)] transition-all">
+                      <div className="w-32 h-44 shrink-0 shadow-[10px_0_15px_rgba(0,0,0,0.5)] z-10 border-r border-[#2C261A] overflow-hidden">
+                         {book.cover_image 
+                           ? <img src={book.cover_image} alt={book.titre} className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-700" />
+                           : <div className="w-full h-full bg-[#1C1812] flex items-center justify-center text-xs text-gray-500 p-2 text-center font-bold">{book.titre}</div>
+                         }
+                      </div>
+                      <div className="p-4 flex flex-col justify-center w-full relative overflow-hidden">
+                           <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/5 blur-3xl group-hover:bg-purple-500/20 transition-colors"></div>
+                           
+                           <h3 className="text-lg font-bold text-white mb-1 group-hover:text-purple-300 transition-colors relative z-10 truncate">{book.titre}</h3>
+                           <p className="text-sm text-gray-400 mb-4 relative z-10 truncate">{book.auteur}</p>
+                           <span className="block w-full py-2 text-center bg-transparent border border-purple-900 text-purple-300 text-xs font-bold uppercase tracking-widest rounded group-hover:bg-purple-900/50 group-hover:text-white transition-colors relative z-10">
+                              Voir détails
+                           </span>
+                      </div>
                     </div>
-                    <div className="p-4 flex flex-col justify-center w-full relative overflow-hidden">
-                         {/* Subtle AI Glow */}
-                         <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/5 blur-3xl group-hover:bg-purple-500/20 transition-colors"></div>
-                         
-                         <h3 className="text-lg font-bold text-white mb-1 group-hover:text-purple-300 transition-colors relative z-10 truncate">{book.titre}</h3>
-                         <p className="text-sm text-gray-400 mb-4 relative z-10 truncate">{book.auteur}</p>
-                         <button className="w-full py-2 bg-transparent border border-purple-900 text-purple-300 text-xs font-bold uppercase tracking-widest rounded hover:bg-purple-900/50 hover:text-white transition-colors relative z-10">
-                            Ajouter / Réserver
-                         </button>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
             </div>
           </div>
         </div>
@@ -166,7 +209,7 @@ export default function UserLibrary({ recommendations = [] }) {
              
              <div className="mb-8 relative z-10">
                <div className="flex justify-between items-end mb-3">
-                 <p className="text-sm text-gray-300 font-bold uppercase tracking-wider">Livre en cours : <span className="text-white">Sapiens</span></p>
+                  <p className="text-sm text-gray-300 font-bold uppercase tracking-wider">Livre en cours : <span className="text-white">{filteredBooks[0]?.titre || 'Aucun livre'}</span></p>
                  <span className="text-xl font-black text-[#D4AF37]">{readingProgress}%</span>
                </div>
                
@@ -175,9 +218,9 @@ export default function UserLibrary({ recommendations = [] }) {
                      <div className="bg-gradient-to-r from-orange-500 to-[#D4AF37] h-3 rounded-full shadow-[0_0_10px_#D4AF37] transition-all duration-1000" style={{ width: `${readingProgress}%`}}></div>
                  </div>
                </div>
-               <Link to="/reader" className="text-xs text-gray-500 uppercase tracking-widest font-bold hover:text-[#D4AF37] transition-colors flex items-center gap-1 group-hover:underline">
-                 Mettre à jour la progression <ChevronRight className="w-3 h-3"/>
-               </Link>
+                <Link to={filteredBooks[0] ? `/reader/${filteredBooks[0].id}` : '#'} className="text-xs text-gray-500 uppercase tracking-widest font-bold hover:text-[#D4AF37] transition-colors flex items-center gap-1 group-hover:underline">
+                  Mettre à jour la progression <ChevronRight className="w-3 h-3"/>
+                </Link>
              </div>
 
              <div className="grid grid-cols-3 gap-4 text-center relative z-10">

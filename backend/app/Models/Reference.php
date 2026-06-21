@@ -67,6 +67,12 @@ class Reference extends Model
         return $this->belongsTo(Utilisateur::class, 'utilisateur_id');
     }
 
+    /** Avis / notes laissés par les utilisateurs. */
+    public function avis(): HasMany
+    {
+        return $this->hasMany(Avis::class, 'reference_id');
+    }
+
     /** Tags associés (N:N via reference_tag). */
     public function tags(): BelongsToMany
     {

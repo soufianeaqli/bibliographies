@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Home, LayoutGrid, Star, Clock, FileText, Tag, User, Settings, Play, BookOpen, Trash2, Edit2, Search, ArrowRight, ShieldCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { fetchBooks } from '../api/libraryClient';
 
 const PageHeader = ({ icon: Icon, title, desc }) => (
   <div className="px-8 pt-10 pb-6 relative z-10">
@@ -28,44 +30,86 @@ const PageContainer = ({ children }) => (
   </div>
 );
 
-export const Accueil = () => (
+export const Accueil = () => {
+  const { utilisateur } = useAuth();
+  const [books, setBooks] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchBooks()
+      .then(setBooks)
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  const featuredBooks = books.filter(b => b.is_featured).slice(0, 3);
+  const iaRecommendations = featuredBooks.length >= 3 ? featuredBooks : [...featuredBooks, ...books.filter(b => !b.is_featured)].slice(0, 3);
+
+  const totalPages = books.reduce((acc, b) => acc + (b.total_pages || 300), 0);
+  const estimatedHours = Math.round(totalPages / 250);
+
+  return (
   <PageContainer>
     <PageHeader icon={Home} title="Accueil" desc="Votre tableau de bord de lecture personnel." />
     <div className="px-8 mt-4 grid grid-cols-1 xl:grid-cols-3 gap-8 pb-12">
        <div className="xl:col-span-2 space-y-8">
+
+          {loading ? (
+            <div className="bg-[#14120E]/80 backdrop-blur-xl border border-[#2C261A] rounded-3xl p-8 animate-pulse">
+              <div className="h-6 bg-[#2C261A] rounded w-48 mb-4"></div>
+              <div className="h-4 bg-[#2C261A] rounded w-96 mb-8"></div>
+              <div className="flex gap-8">
+                <div className="w-40 aspect-[2/3] bg-[#2C261A] rounded-xl"></div>
+                <div className="flex-1 space-y-4">
+                  <div className="h-3 bg-[#2C261A] rounded w-full"></div>
+                  <div className="h-2 bg-[#2C261A] rounded w-full"></div>
+                  <div className="h-10 bg-[#2C261A] rounded w-48"></div>
+                </div>
+              </div>
+            </div>
+          ) : books.length === 0 ? (
+            <div className="bg-[#14120E]/80 backdrop-blur-xl border border-[#2C261A] rounded-3xl p-12 text-center">
+              <BookOpen className="w-16 h-16 text-[#D4AF37] mx-auto mb-4" />
+              <p className="text-gray-500 text-lg">Aucun livre disponible pour le moment.</p>
+            </div>
+          ) : (
           <div className="bg-[#14120E]/80 backdrop-blur-xl border border-[#D4AF37]/20 rounded-3xl p-8 shadow-[0_10px_40px_rgba(0,0,0,0.5)] relative overflow-hidden group">
              <div className="absolute -right-20 -top-20 w-64 h-64 bg-[#D4AF37]/10 rounded-full blur-[50px] group-hover:bg-[#D4AF37]/20 transition-all duration-700"></div>
              <h2 className="text-2xl font-bold text-white mb-2 relative z-10">Reprendre la lecture</h2>
-             <p className="text-gray-400 mb-8 relative z-10">Vous étiez à la page 145 de <strong className="text-[#D4AF37]">Sapiens</strong>.</p>
+             <p className="text-gray-400 mb-8 relative z-10">Vous étiez à la page {Math.round((books[0]?.total_pages || 300) * 0.45)} de <strong className="text-[#D4AF37]">{books[0]?.titre}</strong>.</p>
              
-             <div className="flex flex-col sm:flex-row items-center sm:items-end gap-8 relative z-10">
-               <div className="w-40 rounded-xl shadow-[0_15px_35px_rgba(0,0,0,0.8)] transform -rotate-3 group-hover:rotate-0 transition-all duration-500 border border-[#2C261A] overflow-hidden">
-                  <img src="https://images.unsplash.com/photo-1544947950-fa07a98d237f?q=80&w=300" alt="Sapiens" className="w-full h-auto object-cover" />
-               </div>
-               <div className="flex-1 w-full pb-2">
-                  <div className="flex justify-between text-xs text-[#D4AF37] font-bold mb-2 uppercase tracking-widest"><span>Progression</span> <span>45%</span></div>
-                  <div className="w-full bg-[#0E0C0A] h-2 rounded-full overflow-hidden mb-6 border border-[#2C261A]">
-                     <div className="h-full bg-gradient-to-r from-orange-500 to-[#D4AF37] w-[45%] shadow-[0_0_10px_#D4AF37]"></div>
-                  </div>
-                  <Link to="/reader" className="inline-flex items-center justify-center gap-2 bg-[#D4AF37] text-black px-8 py-3 rounded-lg font-black uppercase tracking-wider hover:bg-white transition-colors shadow-[0_0_20px_rgba(212,175,55,0.4)]">
-                     <Play className="w-5 h-5 fill-black" /> Continuer Mode 3D
-                  </Link>
-               </div>
-             </div>
+              <div className="flex flex-col sm:flex-row items-center sm:items-end gap-8 relative z-10">
+                <Link to={`/book/${books[0]?.id}`} className="w-40 rounded-xl shadow-[0_15px_35px_rgba(0,0,0,0.8)] transform -rotate-3 group-hover:rotate-0 transition-all duration-500 border border-[#2C261A] overflow-hidden">
+                   {books[0]?.cover_image
+                     ? <img src={books[0].cover_image} alt={books[0].titre} className="w-full h-auto object-cover" />
+                     : <div className="w-40 aspect-[2/3] bg-[#1C1812] flex items-center justify-center text-gray-500 text-sm font-bold p-4 text-center">{books[0]?.titre}</div>
+                   }
+                </Link>
+                <div className="flex-1 w-full pb-2">
+                   <div className="flex justify-between text-xs text-[#D4AF37] font-bold mb-2 uppercase tracking-widest"><span>Progression</span> <span>45%</span></div>
+                   <div className="w-full bg-[#0E0C0A] h-2 rounded-full overflow-hidden mb-6 border border-[#2C261A]">
+                      <div className="h-full bg-gradient-to-r from-orange-500 to-[#D4AF37] w-[45%] shadow-[0_0_10px_#D4AF37]"></div>
+                   </div>
+                   <Link to={`/reader/${books[0]?.id}`} className="inline-flex items-center justify-center gap-2 bg-[#D4AF37] text-black px-8 py-3 rounded-lg font-black uppercase tracking-wider hover:bg-white transition-colors shadow-[0_0_20px_rgba(212,175,55,0.4)]">
+                      <Play className="w-5 h-5 fill-black" /> Continuer Mode 3D
+                   </Link>
+                </div>
+              </div>
           </div>
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div className="bg-[#14120E]/80 backdrop-blur-md border border-[#2C261A] rounded-2xl p-6 hover:border-[#D4AF37]/40 transition-colors shadow-2xl flex items-center justify-between">
                  <div>
                    <h3 className="text-[#D4AF37] font-bold mb-1 uppercase text-xs tracking-wider">Objectif Mensuel</h3>
-                   <p className="text-4xl font-black text-white">3 <span className="text-lg text-gray-500 font-normal">/ 5 Livres</span></p>
+                   <p className="text-4xl font-black text-white">{books.length} <span className="text-lg text-gray-500 font-normal">/ {Math.max(books.length, 5)} Livres</span></p>
                  </div>
-                 <div className="w-16 h-16 rounded-full border-4 border-[#D4AF37] flex items-center justify-center text-[#D4AF37] font-bold">60%</div>
+                 <div className="w-16 h-16 rounded-full border-4 border-[#D4AF37] flex items-center justify-center text-[#D4AF37] font-bold">{Math.min(100, Math.round((books.length / Math.max(books.length, 5)) * 100))}%</div>
               </div>
               <div className="bg-[#14120E]/80 backdrop-blur-md border border-[#2C261A] rounded-2xl p-6 hover:border-[#D4AF37]/40 transition-colors shadow-2xl flex items-center justify-between">
                  <div>
                    <h3 className="text-[#D4AF37] font-bold mb-1 uppercase text-xs tracking-wider">Temps de Lecture</h3>
-                   <p className="text-4xl font-black text-white">24<span className="text-lg text-gray-500 font-normal">h</span></p>
+                   <p className="text-4xl font-black text-white">{estimatedHours}<span className="text-lg text-gray-500 font-normal">h</span></p>
                  </div>
                  <Clock className="w-10 h-10 text-[#2C261A]" />
               </div>
@@ -76,30 +120,41 @@ export const Accueil = () => (
           <div className="bg-gradient-to-b from-[#1A1525] to-[#0E0C0A] border border-purple-900/50 rounded-3xl p-6 shadow-[0_0_30px_rgba(147,51,234,0.1)] h-full">
              <h3 className="text-purple-400 font-bold flex items-center gap-2 mb-8 uppercase tracking-widest"><Tag className="w-5 h-5"/> Recommandé par l'IA</h3>
              <div className="space-y-6">
-                {[
-                  {title: 'Dune', author: 'Frank Herbert', img: 'https://images.unsplash.com/photo-1522199670076-2852f80289c3?q=80&w=150'},
-                  {title: '1984', author: 'George Orwell', img: 'https://images.unsplash.com/photo-1535905557558-afc4877a26fc?q=80&w=150'},
-                  {title: 'Fahrenheit 451', author: 'Ray Bradbury', img: 'https://images.unsplash.com/photo-1474366521946-c3d4b507abf2?q=80&w=150'}
-                ].map((bk, i) => (
-                  <div key={i} className="flex gap-5 items-center group cursor-pointer bg-[#14120E] p-3 rounded-xl border border-transparent hover:border-purple-500/30 hover:bg-[#1A1525] transition-all">
+                {loading ? (
+                  Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="flex gap-5 items-center animate-pulse">
+                      <div className="w-14 h-20 bg-[#2C261A] rounded"></div>
+                      <div className="flex-1 space-y-2">
+                        <div className="h-4 bg-[#2C261A] rounded w-24"></div>
+                        <div className="h-3 bg-[#2C261A] rounded w-16"></div>
+                      </div>
+                    </div>
+                  ))
+                ) : iaRecommendations.length === 0 ? (
+                  <p className="text-gray-500 text-sm text-center py-8">Aucune recommandation disponible.</p>
+                ) : (
+                  iaRecommendations.map((bk, i) => (
+                  <Link to={`/book/${bk.id}`} key={i} className="flex gap-5 items-center group cursor-pointer bg-[#14120E] p-3 rounded-xl border border-transparent hover:border-purple-500/30 hover:bg-[#1A1525] transition-all">
                     <div className="w-14 h-20 rounded shadow-lg border border-[#2C261A] group-hover:shadow-[0_0_15px_rgba(168,85,247,0.4)] transition-all overflow-hidden">
-                      <img src={bk.img} className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-500" alt={bk.title} />
+                      {bk.cover_image
+                        ? <img src={bk.cover_image} className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-500" alt={bk.titre} />
+                        : <div className="w-full h-full bg-[#1C1812] flex items-center justify-center text-[8px] text-gray-500 font-bold p-1 text-center">{bk.titre}</div>
+                      }
                     </div>
                     <div>
-                      <h4 className="text-white font-bold text-base group-hover:text-purple-300 transition-colors">{bk.title}</h4>
-                      <p className="text-sm text-gray-400">{bk.author}</p>
+                      <h4 className="text-white font-bold text-base group-hover:text-purple-300 transition-colors">{bk.titre}</h4>
+                      <p className="text-sm text-gray-400">{bk.auteur}</p>
                     </div>
-                  </div>
-                ))}
+                  </Link>
+                  ))
+                )}
              </div>
-             <button className="w-full mt-8 py-3 bg-purple-900/20 text-purple-300 border border-purple-500/30 rounded-xl font-bold hover:bg-purple-900/40 transition-colors text-sm uppercase tracking-wider">
-               Voir tout
-             </button>
           </div>
        </div>
     </div>
   </PageContainer>
 );
+};
 
 export const Categories = () => {
   const cats = [
@@ -256,7 +311,40 @@ const SparklesIcon = (props) => (
   <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>
 );
 
-export const Profil = () => (
+export const Profil = () => {
+  const { utilisateur, updateProfile } = useAuth();
+  const [nom, setNom] = useState('');
+  const [email, setEmail] = useState('');
+  const [motDePasse, setMotDePasse] = useState('');
+  const [message, setMessage] = useState('');
+  const [msgType, setMsgType] = useState('success');
+
+  useEffect(() => {
+    if (utilisateur) {
+      setNom(utilisateur.nom || '');
+      setEmail(utilisateur.email || '');
+    }
+  }, [utilisateur]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await updateProfile({
+        nom,
+        email,
+        motDePasse: motDePasse || undefined,
+        motDePasseConfirmation: motDePasse || undefined,
+      });
+      setMessage('Profil mis à jour avec succès !');
+      setMsgType('success');
+      setMotDePasse('');
+    } catch {
+      setMessage('Erreur lors de la mise à jour.');
+      setMsgType('error');
+    }
+  };
+
+  return (
   <PageContainer>
     <PageHeader icon={User} title="Profil Personnel" desc="Identité, badges virtuels et sécurité." />
     <div className="px-8 mt-4 pb-12 grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -265,11 +353,11 @@ export const Profil = () => (
             <div className="absolute inset-0 bg-gradient-to-b from-[#D4AF37]/10 to-transparent opacity-50 pointer-events-none"></div>
             <div className="w-32 h-32 mx-auto rounded-full p-1 bg-gradient-to-tr from-[#D4AF37] to-amber-200 mb-6 relative z-10 shadow-[0_0_30px_rgba(212,175,55,0.4)]">
               <div className="w-full h-full rounded-full overflow-hidden bg-[#0E0C0A]">
-                 <img src="https://ui-avatars.com/api/?name=Ahmed+Lecteur&background=1C1812&color=D4AF37&size=256" alt="Avatar" className="w-full h-full object-cover" />
+                 <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(utilisateur?.nom || 'User')}&background=1C1812&color=D4AF37&size=256`} alt="Avatar" className="w-full h-full object-cover" />
               </div>
             </div>
-            <h3 className="text-2xl font-black text-white relative z-10">Ahmed Lecteur</h3>
-            <p className="text-[#D4AF37] font-bold uppercase tracking-widest text-xs mt-1 mb-6 relative z-10">Lecteur Premium</p>
+            <h3 className="text-2xl font-black text-white relative z-10">{utilisateur?.nom || 'Utilisateur'}</h3>
+            <p className="text-[#D4AF37] font-bold uppercase tracking-widest text-xs mt-1 mb-6 relative z-10">{(utilisateur?.role || 'membre').charAt(0).toUpperCase() + (utilisateur?.role || 'membre').slice(1)}</p>
             <div className="flex justify-center gap-2 relative z-10">
                <span className="bg-[#1C1812] border border-[#2C261A] text-white px-3 py-1 rounded-full text-xs font-bold">Niveau 12</span>
                <span className="bg-[#1C1812] border border-[#2C261A] text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1"><ShieldCheck className="w-3 h-3 text-green-400"/> Vérifié</span>
@@ -279,21 +367,49 @@ export const Profil = () => (
        
        <div className="lg:col-span-2 bg-[#14120E] border border-[#2C261A] rounded-3xl p-8 shadow-2xl">
           <h3 className="text-xl font-bold text-white mb-6 border-b border-[#2C261A] pb-4">Informations de Connexion</h3>
-          <div className="space-y-6 max-w-xl">
+          <form onSubmit={handleSubmit} className="space-y-6 max-w-xl">
+             {message && (
+               <div className={`px-4 py-3 rounded-xl text-sm font-bold border ${
+                 msgType === 'success'
+                   ? 'bg-[#D4AF37]/10 border-[#D4AF37]/50 text-[#D4AF37]'
+                   : 'bg-red-900/20 border-red-500/30 text-red-400'
+               }`}>
+                 {message}
+               </div>
+             )}
              <div>
                 <label className="text-xs text-gray-500 uppercase font-bold tracking-widest mb-2 block">Nom Complet</label>
-                <input disabled className="w-full bg-[#1C1812] border border-[#2C261A] rounded-xl p-4 text-white focus:outline-none focus:border-[#D4AF37] transition-colors shadow-inner" value="Ahmed Lecteur" />
+                <input
+                  value={nom}
+                  onChange={(e) => setNom(e.target.value)}
+                  className="w-full bg-[#1C1812] border border-[#2C261A] rounded-xl p-4 text-white focus:outline-none focus:border-[#D4AF37] transition-colors shadow-inner"
+                />
              </div>
              <div>
                 <label className="text-xs text-gray-500 uppercase font-bold tracking-widest mb-2 block">Adresse Email</label>
-                <input disabled className="w-full bg-[#1C1812] border border-[#2C261A] rounded-xl p-4 text-white focus:outline-none focus:border-[#D4AF37] transition-colors shadow-inner" value="ahmed@exemple.com" />
+                <input
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full bg-[#1C1812] border border-[#2C261A] rounded-xl p-4 text-white focus:outline-none focus:border-[#D4AF37] transition-colors shadow-inner"
+                />
              </div>
-             <button className="bg-[#D4AF37] text-black font-black uppercase tracking-wider text-sm px-8 py-4 rounded-xl hover:bg-white hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">Mettre à jour le profil</button>
-          </div>
+             <div>
+                <label className="text-xs text-gray-500 uppercase font-bold tracking-widest mb-2 block">Nouveau mot de passe (optionnel)</label>
+                <input
+                  type="password"
+                  value={motDePasse}
+                  onChange={(e) => setMotDePasse(e.target.value)}
+                  placeholder="Laisser vide pour conserver l'actuel"
+                  className="w-full bg-[#1C1812] border border-[#2C261A] rounded-xl p-4 text-white focus:outline-none focus:border-[#D4AF37] transition-colors shadow-inner"
+                />
+             </div>
+             <button type="submit" className="bg-[#D4AF37] text-black font-black uppercase tracking-wider text-sm px-8 py-4 rounded-xl hover:bg-white hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">Mettre à jour le profil</button>
+          </form>
        </div>
     </div>
   </PageContainer>
 );
+};
 
 export const Parametres = () => (
   <PageContainer>

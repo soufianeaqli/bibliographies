@@ -19,6 +19,14 @@ export default function AdminDashboard() {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [books, setBooks] = useState([]);
   const [isImporting, setIsImporting] = useState(false);
+  const [toast, setToast] = useState({ message: '', type: '', visible: false });
+
+  useEffect(() => {
+    if (toast.visible) {
+      const timer = setTimeout(() => setToast(prev => ({ ...prev, visible: false })), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast.visible]);
 
   const loadBooks = async () => {
       try {
@@ -43,19 +51,17 @@ export default function AdminDashboard() {
   const handleImportGoogle = async () => {
       setIsImporting(true);
       try {
-          await importBooksFromGoogle();
+          const data = await importBooksFromGoogle();
           await loadBooks();
-          formAlert("Succès", "Livres importés avec succès depuis l'API Google Books !");
+          setActiveTab('library');
+          setToast({ message: data.message || 'Livres importés avec succès !', type: 'success', visible: true });
       } catch (err) {
           console.error("Erreur import", err);
-          alert("Erreur lors de l'import.");
+          setToast({ message: err.response?.data?.error || "Erreur lors de l'import.", type: 'error', visible: true });
       } finally {
           setIsImporting(false);
       }
   };
-
-  // Helper alert override just for demo
-  const formAlert = (title, msg) => alert(`${title}: ${msg}`);
 
   // Advanced Fake data
   const lineData = {
@@ -439,6 +445,19 @@ export default function AdminDashboard() {
           </div>
         )}
       </div>
+
+      {toast.visible && (
+        <div className={`fixed bottom-8 right-8 z-50 flex items-center gap-4 bg-[#1A1713] border shadow-[0_0_30px_rgba(212,175,55,0.3)] text-white px-6 py-4 rounded-2xl animate-fade-in ${
+          toast.type === 'success' ? 'border-[#D4AF37]/50' : 'border-red-500/50'
+        }`}>
+          {toast.type === 'success' ? (
+            <CheckCircle className="w-6 h-6 text-[#D4AF37] shrink-0" />
+          ) : (
+            <XCircle className="w-6 h-6 text-red-500 shrink-0" />
+          )}
+          <p className="font-bold text-sm">{toast.message}</p>
+        </div>
+      )}
 
       {showUploadModal && <AdminMediaUpload onClose={() => setShowUploadModal(false)} onUploadSuccess={loadBooks} />}
     </div>

@@ -17,6 +17,8 @@ Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 
 use App\Http\Controllers\Api\BookController;
+use App\Http\Controllers\Api\BookDetailController;
+use App\Http\Controllers\Api\AdminController;
 
 /* --- Routes protégées (token Sanctum requis) --- */
 Route::middleware('auth:sanctum')->group(function () {
@@ -24,9 +26,40 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', [AuthController::class, 'user']);
     Route::put('/user', [AuthController::class, 'update']);
     
-    // NOUVEAU: Smart Library Books CRUD
+    // Smart Library Books CRUD
     Route::post('/books/import', [BookController::class, 'importFromGoogle']);
     Route::get('/books', [BookController::class, 'index']);
     Route::post('/books', [BookController::class, 'store']);
     Route::delete('/books/{id}', [BookController::class, 'destroy']);
+
+    // Détail et lecture des livres
+    Route::get('/books/{id}', [BookDetailController::class, 'show']);
+    Route::post('/books/{id}/reserve', [BookDetailController::class, 'reserve']);
+    Route::post('/books/{id}/cancel-reservation', [BookDetailController::class, 'cancelReservation']);
+    Route::get('/reservations/mine', [BookDetailController::class, 'getMyReservations']);
+
+    // Progression de lecture
+    Route::get('/books/{id}/reading-progress', [BookDetailController::class, 'getReadingProgress']);
+    Route::post('/books/{id}/reading-progress', [BookDetailController::class, 'updateReadingProgress']);
+
+    // Marque-pages
+    Route::get('/books/{id}/bookmarks', [BookDetailController::class, 'getBookmarks']);
+    Route::post('/books/{id}/bookmarks', [BookDetailController::class, 'addBookmark']);
+    Route::delete('/bookmarks/{id}', [BookDetailController::class, 'deleteBookmark']);
+
+    // Notes personnelles
+    Route::get('/books/{id}/notes', [BookDetailController::class, 'getNotes']);
+    Route::post('/books/{id}/notes', [BookDetailController::class, 'addNote']);
+    Route::delete('/books/{id}/notes/{noteId}', [BookDetailController::class, 'deleteNote']);
+
+    // Avis / Commentaires
+    Route::get('/books/{id}/avis', [BookDetailController::class, 'getAvis']);
+    Route::post('/books/{id}/avis', [BookDetailController::class, 'addAvis']);
+
+    // Admin : gestion des réservations
+    Route::middleware('admin')->group(function () {
+        Route::get('/admin/reservations/pending', [AdminController::class, 'pendingReservations']);
+        Route::post('/admin/reservations/{id}/approve', [AdminController::class, 'approve']);
+        Route::post('/admin/reservations/{id}/reject', [AdminController::class, 'reject']);
+    });
 });

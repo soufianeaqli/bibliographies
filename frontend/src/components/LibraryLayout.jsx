@@ -2,15 +2,20 @@ import React from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { 
   Library, Home, BookOpen, LayoutGrid, Star, Clock, 
-  FileText, Tag, User, Settings, LogOut, Search, Bell
+  FileText, Tag, User, Settings, LogOut, Search, Bell, Book, ShieldCheck
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function LibraryLayout() {
   const { logout, utilisateur } = useAuth();
+  const estAdmin = utilisateur?.role === 'administrateur';
   const navItems = [
     { icon: Home, label: 'Accueil', path: '/bibliotheque' },
     { icon: BookOpen, label: 'Bibliothèque', path: '/bibliotheque/livres' },
+    ...(estAdmin
+      ? [{ icon: ShieldCheck, label: 'Réservations', path: '/bibliotheque/reservations' }]
+      : [{ icon: Book, label: 'Mes Livres', path: '/bibliotheque/mes-livres' }]
+    ),
     { icon: LayoutGrid, label: 'Catégories', path: '/bibliotheque/categories' },
     { icon: Star, label: 'Favoris', path: '/bibliotheque/favoris' },
     { icon: Clock, label: 'Historiques', path: '/bibliotheque/historique' },
