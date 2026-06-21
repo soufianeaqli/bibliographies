@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Home, LayoutGrid, Star, Clock, FileText, Tag, User, Settings, Play, BookOpen, Trash2, Edit2, Search, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Home, LayoutGrid, Star, Clock, FileText, Tag, User, Settings, Play, BookOpen, Trash2, Edit2, Search, ArrowRight, ShieldCheck, ChevronRight, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { fetchBooks } from '../api/libraryClient';
@@ -44,111 +44,200 @@ export const Accueil = () => {
 
   const featuredBooks = books.filter(b => b.is_featured).slice(0, 3);
   const iaRecommendations = featuredBooks.length >= 3 ? featuredBooks : [...featuredBooks, ...books.filter(b => !b.is_featured)].slice(0, 3);
-
   const totalPages = books.reduce((acc, b) => acc + (b.total_pages || 300), 0);
   const estimatedHours = Math.round(totalPages / 250);
+  const uniqueAuthors = [...new Set(books.map(b => b.auteur))].length;
+  const recentBooks = books.slice(0, 6);
+  const greeting = (h) => h < 12 ? 'Bonjour' : h < 18 ? 'Bon après-midi' : 'Bonsoir';
 
   return (
   <PageContainer>
-    <PageHeader icon={Home} title="Accueil" desc="Votre tableau de bord de lecture personnel." />
-    <div className="px-8 mt-4 grid grid-cols-1 xl:grid-cols-3 gap-8 pb-12">
+    <div className="px-8 pt-10 pb-6 relative z-10">
+      {loading ? (
+        <div className="animate-pulse space-y-4">
+          <div className="h-10 bg-[#2C261A] rounded w-96"></div>
+          <div className="h-5 bg-[#2C261A] rounded w-64"></div>
+        </div>
+      ) : (
+        <>
+          <h1 className="text-4xl lg:text-5xl font-black text-white mb-2 tracking-tight">
+            {greeting(new Date().getHours())}{utilisateur?.nom ? `, ${utilisateur.nom.split(' ')[0]}` : ''}
+            <span className="block text-[#D4AF37] text-2xl lg:text-3xl font-bold mt-1">Bienvenue dans votre bibliothèque</span>
+          </h1>
+          <p className="text-gray-400 text-lg mt-4 max-w-2xl">
+            {books.length > 0
+              ? `${books.length} ouvrages disponibles — ${uniqueAuthors} auteurs — ${estimatedHours}h de lecture estimées`
+              : 'Explorez, lisez et gérez vos références bibliographiques en toute simplicité.'}
+          </p>
+        </>
+      )}
+    </div>
+
+    <div className="px-8 mt-2 grid grid-cols-1 xl:grid-cols-3 gap-8 pb-12">
        <div className="xl:col-span-2 space-y-8">
 
           {loading ? (
             <div className="bg-[#14120E]/80 backdrop-blur-xl border border-[#2C261A] rounded-3xl p-8 animate-pulse">
-              <div className="h-6 bg-[#2C261A] rounded w-48 mb-4"></div>
-              <div className="h-4 bg-[#2C261A] rounded w-96 mb-8"></div>
               <div className="flex gap-8">
-                <div className="w-40 aspect-[2/3] bg-[#2C261A] rounded-xl"></div>
+                <div className="w-40 aspect-[2/3] bg-[#2C261A] rounded-xl shrink-0"></div>
                 <div className="flex-1 space-y-4">
-                  <div className="h-3 bg-[#2C261A] rounded w-full"></div>
-                  <div className="h-2 bg-[#2C261A] rounded w-full"></div>
-                  <div className="h-10 bg-[#2C261A] rounded w-48"></div>
+                  <div className="h-6 bg-[#2C261A] rounded w-48"></div>
+                  <div className="h-4 bg-[#2C261A] rounded w-full"></div>
+                  <div className="h-4 bg-[#2C261A] rounded w-3/4"></div>
+                  <div className="h-10 bg-[#2C261A] rounded w-48 mt-6"></div>
                 </div>
               </div>
             </div>
           ) : books.length === 0 ? (
-            <div className="bg-[#14120E]/80 backdrop-blur-xl border border-[#2C261A] rounded-3xl p-12 text-center">
-              <BookOpen className="w-16 h-16 text-[#D4AF37] mx-auto mb-4" />
-              <p className="text-gray-500 text-lg">Aucun livre disponible pour le moment.</p>
+            <div className="bg-[#14120E]/80 backdrop-blur-xl border border-[#2C261A] rounded-3xl p-16 text-center">
+              <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-[#D4AF37]/10 flex items-center justify-center border border-[#D4AF37]/20">
+                <BookOpen className="w-12 h-12 text-[#D4AF37]" />
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-3">Bienvenue dans votre bibliothèque</h2>
+              <p className="text-gray-400 max-w-md mx-auto mb-8">Commencez par importer des livres depuis Google Books ou ajoutez vos propres références.</p>
+              <Link to="/bibliotheque/livres" className="inline-flex items-center gap-2 bg-[#D4AF37] text-black px-8 py-4 rounded-xl font-bold uppercase tracking-wider hover:bg-white transition-all shadow-[0_0_25px_rgba(212,175,55,0.3)]">
+                <BookOpen className="w-5 h-5" /> Découvrir la bibliothèque
+              </Link>
             </div>
           ) : (
-          <div className="bg-[#14120E]/80 backdrop-blur-xl border border-[#D4AF37]/20 rounded-3xl p-8 shadow-[0_10px_40px_rgba(0,0,0,0.5)] relative overflow-hidden group">
-             <div className="absolute -right-20 -top-20 w-64 h-64 bg-[#D4AF37]/10 rounded-full blur-[50px] group-hover:bg-[#D4AF37]/20 transition-all duration-700"></div>
-             <h2 className="text-2xl font-bold text-white mb-2 relative z-10">Reprendre la lecture</h2>
-             <p className="text-gray-400 mb-8 relative z-10">Vous étiez à la page {Math.round((books[0]?.total_pages || 300) * 0.45)} de <strong className="text-[#D4AF37]">{books[0]?.titre}</strong>.</p>
-             
-              <div className="flex flex-col sm:flex-row items-center sm:items-end gap-8 relative z-10">
-                <Link to={`/book/${books[0]?.id}`} className="w-40 rounded-xl shadow-[0_15px_35px_rgba(0,0,0,0.8)] transform -rotate-3 group-hover:rotate-0 transition-all duration-500 border border-[#2C261A] overflow-hidden">
-                   {books[0]?.cover_image
-                     ? <img src={books[0].cover_image} alt={books[0].titre} className="w-full h-auto object-cover" />
-                     : <div className="w-40 aspect-[2/3] bg-[#1C1812] flex items-center justify-center text-gray-500 text-sm font-bold p-4 text-center">{books[0]?.titre}</div>
-                   }
+          <div className="bg-gradient-to-br from-[#1C1812] to-[#14120E] border border-[#D4AF37]/20 rounded-3xl overflow-hidden shadow-[0_10px_40px_rgba(0,0,0,0.5)] relative group">
+            <div className="absolute -right-32 -top-32 w-80 h-80 bg-[#D4AF37]/10 rounded-full blur-[80px] group-hover:bg-[#D4AF37]/20 transition-all duration-700 pointer-events-none"></div>
+            <div className="p-8 relative z-10">
+              <div className="flex items-start justify-between mb-6">
+                <div>
+                  <span className="text-xs text-[#D4AF37] font-bold uppercase tracking-widest">À la une</span>
+                  <h2 className="text-2xl font-bold text-white mt-1">{books[0]?.titre}</h2>
+                  <p className="text-gray-400 text-sm mt-1">{books[0]?.auteur}</p>
+                </div>
+                {books[0]?.rating > 0 && (
+                  <div className="flex items-center gap-1.5 bg-[#0E0C0A]/60 px-3 py-1.5 rounded-lg border border-[#2C261A]">
+                    <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
+                    <span className="text-white font-bold text-sm">{books[0].rating}</span>
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-col sm:flex-row gap-8">
+                <Link to={`/book/${books[0]?.id}`} className="w-36 shrink-0 rounded-xl overflow-hidden border border-[#2C261A] shadow-[0_15px_35px_rgba(0,0,0,0.8)] transform -rotate-2 group-hover:rotate-0 transition-all duration-500">
+                  {books[0]?.cover_image
+                    ? <img src={books[0].cover_image} alt={books[0].titre} className="w-full h-auto aspect-[2/3] object-cover" />
+                    : <div className="w-full aspect-[2/3] bg-[#1C1812] flex items-center justify-center text-gray-500 text-sm font-bold p-4 text-center">{books[0]?.titre}</div>
+                  }
                 </Link>
-                <div className="flex-1 w-full pb-2">
-                   <div className="flex justify-between text-xs text-[#D4AF37] font-bold mb-2 uppercase tracking-widest"><span>Progression</span> <span>45%</span></div>
-                   <div className="w-full bg-[#0E0C0A] h-2 rounded-full overflow-hidden mb-6 border border-[#2C261A]">
-                      <div className="h-full bg-gradient-to-r from-orange-500 to-[#D4AF37] w-[45%] shadow-[0_0_10px_#D4AF37]"></div>
-                   </div>
-                   <Link to={`/reader/${books[0]?.id}`} className="inline-flex items-center justify-center gap-2 bg-[#D4AF37] text-black px-8 py-3 rounded-lg font-black uppercase tracking-wider hover:bg-white transition-colors shadow-[0_0_20px_rgba(212,175,55,0.4)]">
-                      <Play className="w-5 h-5 fill-black" /> Continuer Mode 3D
-                   </Link>
+                <div className="flex-1">
+                  <p className="text-gray-300 text-sm leading-relaxed line-clamp-4">{books[0]?.description || 'Aucune description disponible.'}</p>
+                  <div className="flex flex-wrap gap-3 mt-6">
+                    <Link to={`/book/${books[0]?.id}`} className="flex items-center gap-2 bg-[#D4AF37] text-black px-6 py-3 rounded-xl font-bold uppercase tracking-wider text-sm hover:bg-white transition-all shadow-[0_0_20px_rgba(212,175,55,0.3)]">
+                      <BookOpen className="w-4 h-4" /> Réserver
+                    </Link>
+                  </div>
                 </div>
               </div>
+            </div>
           </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <div className="bg-[#14120E]/80 backdrop-blur-md border border-[#2C261A] rounded-2xl p-6 hover:border-[#D4AF37]/40 transition-colors shadow-2xl flex items-center justify-between">
-                 <div>
-                   <h3 className="text-[#D4AF37] font-bold mb-1 uppercase text-xs tracking-wider">Objectif Mensuel</h3>
-                   <p className="text-4xl font-black text-white">{books.length} <span className="text-lg text-gray-500 font-normal">/ {Math.max(books.length, 5)} Livres</span></p>
-                 </div>
-                 <div className="w-16 h-16 rounded-full border-4 border-[#D4AF37] flex items-center justify-center text-[#D4AF37] font-bold">{Math.min(100, Math.round((books.length / Math.max(books.length, 5)) * 100))}%</div>
+          {/* Stats Cards */}
+          {!loading && books.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+            <div className="bg-[#14120E]/80 backdrop-blur-md border border-[#2C261A] rounded-2xl p-6 hover:border-[#D4AF37]/40 transition-all shadow-xl">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-[#D4AF37] font-bold uppercase text-xs tracking-wider">Collection</h3>
+                <BookOpen className="w-6 h-6 text-[#2C261A]" />
               </div>
-              <div className="bg-[#14120E]/80 backdrop-blur-md border border-[#2C261A] rounded-2xl p-6 hover:border-[#D4AF37]/40 transition-colors shadow-2xl flex items-center justify-between">
-                 <div>
-                   <h3 className="text-[#D4AF37] font-bold mb-1 uppercase text-xs tracking-wider">Temps de Lecture</h3>
-                   <p className="text-4xl font-black text-white">{estimatedHours}<span className="text-lg text-gray-500 font-normal">h</span></p>
-                 </div>
-                 <Clock className="w-10 h-10 text-[#2C261A]" />
+              <p className="text-4xl font-black text-white">{books.length}</p>
+              <p className="text-sm text-gray-500 mt-1">ouvrages disponibles</p>
+            </div>
+            <div className="bg-[#14120E]/80 backdrop-blur-md border border-[#2C261A] rounded-2xl p-6 hover:border-[#D4AF37]/40 transition-all shadow-xl">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-[#D4AF37] font-bold uppercase text-xs tracking-wider">Auteurs</h3>
+                <User className="w-6 h-6 text-[#2C261A]" />
               </div>
+              <p className="text-4xl font-black text-white">{uniqueAuthors}</p>
+              <p className="text-sm text-gray-500 mt-1">auteurs uniques</p>
+            </div>
+            <div className="bg-[#14120E]/80 backdrop-blur-md border border-[#2C261A] rounded-2xl p-6 hover:border-[#D4AF37]/40 transition-all shadow-xl">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-[#D4AF37] font-bold uppercase text-xs tracking-wider">Lecture</h3>
+                <Clock className="w-6 h-6 text-[#2C261A]" />
+              </div>
+              <p className="text-4xl font-black text-white">~{estimatedHours}<span className="text-xl text-gray-500">h</span></p>
+              <p className="text-sm text-gray-500 mt-1">temps estimé</p>
+            </div>
           </div>
+          )}
+
+          {/* Recently Added / All Books */}
+          {!loading && books.length > 0 && (
+          <div>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-[#D4AF37]" /> Derniers ajouts
+              </h2>
+              <Link to="/bibliotheque/livres" className="text-sm text-[#D4AF37] font-bold hover:text-white transition-colors flex items-center gap-1">
+                Voir tout <ChevronRight className="w-4 h-4" />
+              </Link>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+              {recentBooks.map((book, idx) => (
+                <Link key={idx} to={`/book/${book.id}`} className="group">
+                  <div className="aspect-[2/3] rounded-xl overflow-hidden bg-[#1C1812] border border-[#2C261A] group-hover:border-[#D4AF37]/50 transition-all shadow-lg group-hover:shadow-[0_0_25px_rgba(212,175,55,0.15)]">
+                    {book.cover_image
+                      ? <img src={book.cover_image} alt={book.titre} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                      : <div className="w-full h-full flex items-center justify-center text-gray-500 text-xs font-bold p-2 text-center">{book.titre}</div>
+                    }
+                  </div>
+                  <h3 className="text-sm font-bold text-white mt-2 truncate group-hover:text-[#D4AF37] transition-colors">{book.titre}</h3>
+                  <p className="text-xs text-gray-500 truncate">{book.auteur}</p>
+                </Link>
+              ))}
+            </div>
+          </div>
+          )}
        </div>
-       
+
+       {/* Right Sidebar */}
        <div className="space-y-6">
-          <div className="bg-gradient-to-b from-[#1A1525] to-[#0E0C0A] border border-purple-900/50 rounded-3xl p-6 shadow-[0_0_30px_rgba(147,51,234,0.1)] h-full">
-             <h3 className="text-purple-400 font-bold flex items-center gap-2 mb-8 uppercase tracking-widest"><Tag className="w-5 h-5"/> Recommandé par l'IA</h3>
-             <div className="space-y-6">
-                {loading ? (
-                  Array.from({ length: 3 }).map((_, i) => (
-                    <div key={i} className="flex gap-5 items-center animate-pulse">
-                      <div className="w-14 h-20 bg-[#2C261A] rounded"></div>
-                      <div className="flex-1 space-y-2">
-                        <div className="h-4 bg-[#2C261A] rounded w-24"></div>
-                        <div className="h-3 bg-[#2C261A] rounded w-16"></div>
-                      </div>
-                    </div>
-                  ))
-                ) : iaRecommendations.length === 0 ? (
-                  <p className="text-gray-500 text-sm text-center py-8">Aucune recommandation disponible.</p>
-                ) : (
-                  iaRecommendations.map((bk, i) => (
-                  <Link to={`/book/${bk.id}`} key={i} className="flex gap-5 items-center group cursor-pointer bg-[#14120E] p-3 rounded-xl border border-transparent hover:border-purple-500/30 hover:bg-[#1A1525] transition-all">
-                    <div className="w-14 h-20 rounded shadow-lg border border-[#2C261A] group-hover:shadow-[0_0_15px_rgba(168,85,247,0.4)] transition-all overflow-hidden">
-                      {bk.cover_image
-                        ? <img src={bk.cover_image} className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-500" alt={bk.titre} />
-                        : <div className="w-full h-full bg-[#1C1812] flex items-center justify-center text-[8px] text-gray-500 font-bold p-1 text-center">{bk.titre}</div>
-                      }
-                    </div>
-                    <div>
-                      <h4 className="text-white font-bold text-base group-hover:text-purple-300 transition-colors">{bk.titre}</h4>
-                      <p className="text-sm text-gray-400">{bk.auteur}</p>
-                    </div>
-                  </Link>
-                  ))
-                )}
-             </div>
+          {!loading && books.length > 0 && (
+          <div className="bg-gradient-to-b from-[#1A1525] to-[#0E0C0A] border border-purple-900/40 rounded-2xl p-6 shadow-[0_0_30px_rgba(147,51,234,0.08)]">
+            <h3 className="text-purple-400 font-bold flex items-center gap-2 mb-6 uppercase tracking-widest text-sm">
+              <Sparkles className="w-4 h-4" /> Recommandé pour vous
+            </h3>
+            <div className="space-y-5">
+              {iaRecommendations.length === 0 ? (
+                <p className="text-gray-500 text-sm text-center py-8">Aucune recommandation disponible.</p>
+              ) : (
+                iaRecommendations.map((bk, i) => (
+                <Link to={`/book/${bk.id}`} key={i} className="flex gap-4 items-center group bg-[#14120E] p-3 rounded-xl border border-transparent hover:border-purple-500/30 hover:bg-[#1A1525] transition-all">
+                  <div className="w-12 h-16 rounded-lg overflow-hidden border border-[#2C261A] shrink-0 group-hover:shadow-[0_0_15px_rgba(168,85,247,0.3)] transition-all">
+                    {bk.cover_image
+                      ? <img src={bk.cover_image} className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-500" alt={bk.titre} />
+                      : <div className="w-full h-full bg-[#1C1812] flex items-center justify-center text-[7px] text-gray-500 font-bold p-0.5 text-center">{bk.titre}</div>
+                    }
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="text-white font-bold text-sm group-hover:text-purple-300 transition-colors truncate">{bk.titre}</h4>
+                    <p className="text-xs text-gray-500 truncate">{bk.auteur}</p>
+                  </div>
+                </Link>
+                ))
+              )}
+            </div>
+          </div>
+          )}
+
+          <div className="bg-[#14120E]/80 backdrop-blur-md border border-[#2C261A] rounded-2xl p-6">
+            <h3 className="text-white font-bold text-sm mb-4 uppercase tracking-widest">Navigation rapide</h3>
+            <div className="space-y-2">
+              <Link to="/bibliotheque/livres" className="flex items-center gap-3 px-4 py-3 rounded-xl bg-[#1C1812] border border-[#2C261A] text-gray-300 hover:text-white hover:border-[#D4AF37]/50 transition-all text-sm font-medium">
+                <BookOpen className="w-4 h-4 text-[#D4AF37]" /> Bibliothèque complète
+              </Link>
+              <Link to="/bibliotheque/mes-livres" className="flex items-center gap-3 px-4 py-3 rounded-xl bg-[#1C1812] border border-[#2C261A] text-gray-300 hover:text-white hover:border-[#D4AF37]/50 transition-all text-sm font-medium">
+                <BookOpen className="w-4 h-4 text-[#D4AF37]" /> Mes livres réservés
+              </Link>
+              <Link to="/bibliotheque/historique" className="flex items-center gap-3 px-4 py-3 rounded-xl bg-[#1C1812] border border-[#2C261A] text-gray-300 hover:text-white hover:border-[#D4AF37]/50 transition-all text-sm font-medium">
+                <Clock className="w-4 h-4 text-[#D4AF37]" /> Historique de lecture
+              </Link>
+            </div>
           </div>
        </div>
     </div>
