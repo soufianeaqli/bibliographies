@@ -1,24 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Users, BookOpen, BarChart3, Upload, Film, Headphones, 
-  Settings, CheckCircle, XCircle, Clock, Trash2, Edit, Plus, 
-  FolderPlus, UserPlus, Image as ImageIcon, Video, Mic, Share2, 
-  TrendingUp, Award, StopCircle, Star, Tag, FileText
+  Settings, CheckCircle, XCircle, Clock, Trash2, Edit, 
+  Image as ImageIcon, Video, Mic, Star, Tag
 } from 'lucide-react';
 import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, ArcElement, RadialLinearScale, Filler, BarElement
 } from 'chart.js';
 import { Bar, Doughnut } from 'react-chartjs-2';
-import AdminMediaUpload from './AdminMediaUpload';
-import { fetchBooks, deleteBook, importBooksFromGoogle } from '../api/libraryClient';
+import { fetchBooks, deleteBook, deleteAllBooks, importBooks100 } from '../api/libraryClient';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, ArcElement, RadialLinearScale, Filler, BarElement);
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('analytics');
-  const [showUploadModal, setShowUploadModal] = useState(false);
   const [books, setBooks] = useState([]);
-  const [isImporting, setIsImporting] = useState(false);
+  const [isImporting100, setIsImporting100] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
+  const [importResult, setImportResult] = useState(null);
   const [toast, setToast] = useState({ message: '', type: '', visible: false });
 
   useEffect(() => {
@@ -48,18 +47,35 @@ export default function AdminDashboard() {
       }
   };
 
-  const handleImportGoogle = async () => {
-      setIsImporting(true);
+  const handleImport100 = async () => {
+      setIsImporting100(true);
+      setImportResult(null);
       try {
-          const data = await importBooksFromGoogle();
+          const data = await importBooks100();
           await loadBooks();
-          setActiveTab('library');
-          setToast({ message: data.message || 'Livres importés avec succès !', type: 'success', visible: true });
+          setImportResult(data);
+          const s = data.skipped_no_cover + data.skipped_few_pages + data.skipped_no_description;
+          setToast({ message: `${data.imported} importé(s), ${s} ignoré(s)`, type: 'success', visible: true });
       } catch (err) {
-          console.error("Erreur import", err);
-          setToast({ message: err.response?.data?.error || "Erreur lors de l'import.", type: 'error', visible: true });
+          console.error("Erreur import 100", err);
+          setToast({ message: err.response?.data?.error || "Erreur lors de l'import 100.", type: 'error', visible: true });
       } finally {
-          setIsImporting(false);
+          setIsImporting100(false);
+      }
+  };
+
+  const handleDeleteAll = async () => {
+      if (!window.confirm("Supprimer TOUS les livres définitivement ? Cette action est irréversible.")) return;
+      setIsDeletingAll(true);
+      try {
+          const data = await deleteAllBooks();
+          await loadBooks();
+          setToast({ message: data.message || 'Tous les livres ont été supprimés.', type: 'success', visible: true });
+      } catch (err) {
+          console.error("Erreur suppression", err);
+          setToast({ message: err.response?.data?.error || "Erreur lors de la suppression.", type: 'error', visible: true });
+      } finally {
+          setIsDeletingAll(false);
       }
   };
 
@@ -133,18 +149,20 @@ export default function AdminDashboard() {
         </div>
         <div className="flex gap-4">
             <button 
-               onClick={handleImportGoogle}
-               disabled={isImporting}
-               className="flex items-center justify-center gap-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-8 py-4 rounded-xl font-black uppercase tracking-wider hover:brightness-110 transition-all shadow-[0_0_25px_rgba(147,51,234,0.4)] disabled:opacity-50"
+               onClick={handleImport100}
+               disabled={isImporting100}
+               className="flex items-center justify-center gap-3 bg-[#D4AF37] text-black px-8 py-4 rounded-xl font-black uppercase tracking-wider hover:bg-white transition-all shadow-[0_0_25px_rgba(212,175,55,0.4)] disabled:opacity-50"
             >
-               {isImporting ? <span className="animate-spin inline-block w-5 h-5 border-2 border-white border-t-transparent rounded-full"></span> : <Upload className="w-5 h-5"/>}
-               Import Google API
+               {isImporting100 ? <span className="animate-spin inline-block w-5 h-5 border-2 border-black border-t-transparent rounded-full"></span> : <Upload className="w-5 h-5"/>}
+               Importer 100 livres Pro
             </button>
             <button 
-               onClick={() => setShowUploadModal(true)}
-               className="flex items-center justify-center gap-3 bg-[#D4AF37] text-black px-8 py-4 rounded-xl font-black uppercase tracking-wider hover:bg-white transition-all shadow-[0_0_25px_rgba(212,175,55,0.4)]"
+               onClick={handleDeleteAll}
+               disabled={isDeletingAll}
+               className="flex items-center justify-center gap-3 bg-red-600/20 border border-red-500/40 text-red-400 px-8 py-4 rounded-xl font-black uppercase tracking-wider hover:bg-red-600/40 transition-all disabled:opacity-50"
             >
-               <Upload className="w-5 h-5"/> Ajouter Œuvre
+               {isDeletingAll ? <span className="animate-spin inline-block w-5 h-5 border-2 border-red-400 border-t-transparent rounded-full"></span> : <Trash2 className="w-5 h-5"/>}
+               Supprimer tout
             </button>
         </div>
       </div>
@@ -231,14 +249,53 @@ export default function AdminDashboard() {
         {activeTab === 'library' && (
           <div className="animate-fade-in space-y-6">
             
+            {/* Result Alert */}
+            {importResult && (
+              <div className="bg-[#D4AF37]/5 border border-[#D4AF37]/30 rounded-2xl p-6 shadow-[0_0_20px_rgba(212,175,55,0.1)]">
+                <div className="flex items-start gap-6">
+                  <div className="w-14 h-14 bg-[#D4AF37]/10 rounded-full flex items-center justify-center border border-[#D4AF37]/30 shrink-0">
+                    <CheckCircle className="w-7 h-7 text-[#D4AF37]" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white font-bold text-lg">Import terminé</p>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+                      <div className="bg-[#14120E] rounded-xl p-3 border border-green-500/20 text-center">
+                        <p className="text-2xl font-black text-green-400">{importResult.imported}</p>
+                        <p className="text-xs text-gray-500 mt-1">Importés</p>
+                      </div>
+                      <div className="bg-[#14120E] rounded-xl p-3 border border-red-500/20 text-center">
+                        <p className="text-2xl font-black text-red-400">{importResult.skipped_no_cover || 0}</p>
+                        <p className="text-xs text-gray-500 mt-1">Sans couverture</p>
+                      </div>
+                      <div className="bg-[#14120E] rounded-xl p-3 border border-yellow-500/20 text-center">
+                        <p className="text-2xl font-black text-yellow-400">{importResult.skipped_few_pages || 0}</p>
+                        <p className="text-xs text-gray-500 mt-1">&lt; 20 pages</p>
+                      </div>
+                      <div className="bg-[#14120E] rounded-xl p-3 border border-orange-500/20 text-center">
+                        <p className="text-2xl font-black text-orange-400">{importResult.skipped_no_description || 0}</p>
+                        <p className="text-xs text-gray-500 mt-1">Sans résumé</p>
+                      </div>
+                    </div>
+                    <p className="text-gray-600 text-xs mt-3">
+                      Traités : <span className="text-gray-400 font-bold">{importResult.total_processed || 0}</span> livres au total
+                    </p>
+                  </div>
+                  <button onClick={() => setImportResult(null)} className="text-gray-500 hover:text-white transition-colors shrink-0">
+                    <XCircle className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Action Bar */}
             <div className="flex flex-wrap gap-4">
-              <button onClick={() => setShowUploadModal(true)} className="flex items-center gap-2 bg-[#D4AF37] text-black px-4 py-3 rounded-xl font-bold hover:bg-white transition-all shadow-[0_0_15px_rgba(212,175,55,0.2)]">
-                <Plus className="w-4 h-4"/> Ajouter une œuvre
+              <button onClick={handleImport100} disabled={isImporting100} className="flex items-center gap-2 bg-[#D4AF37]/10 border border-[#D4AF37]/30 text-[#D4AF37] px-4 py-3 rounded-xl font-bold hover:bg-[#D4AF37]/20 transition-all">
+                {isImporting100 ? <span className="animate-spin inline-block w-4 h-4 border-2 border-[#D4AF37] border-t-transparent rounded-full"></span> : <Upload className="w-4 h-4"/>}
+                Importer 100 Pro + Trailers
               </button>
-              <button onClick={handleImportGoogle} disabled={isImporting} className="flex items-center gap-2 bg-purple-600/20 border border-purple-500/30 text-purple-300 px-4 py-3 rounded-xl font-bold hover:bg-purple-600/40 transition-all">
-                {isImporting ? <span className="animate-spin inline-block w-4 h-4 border-2 border-purple-300 border-t-transparent rounded-full"></span> : <Upload className="w-4 h-4"/>}
-                Import Google Books
+              <button onClick={handleDeleteAll} disabled={isDeletingAll} className="flex items-center gap-2 bg-red-600/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-xl font-bold hover:bg-red-600/20 transition-all">
+                {isDeletingAll ? <span className="animate-spin inline-block w-4 h-4 border-2 border-red-400 border-t-transparent rounded-full"></span> : <Trash2 className="w-4 h-4"/>}
+                Supprimer tout
               </button>
             </div>
 
@@ -414,7 +471,6 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {showUploadModal && <AdminMediaUpload onClose={() => setShowUploadModal(false)} onUploadSuccess={loadBooks} />}
     </div>
   );
 }

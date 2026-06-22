@@ -97,6 +97,21 @@ export const addAvis = async (id, payload) => {
     return data;
 };
 
+export const importBooks100 = async () => {
+    const { data } = await client.post('/books/import-100');
+    return data;
+};
+
+export const getBookPages = async (id) => {
+    const { data } = await client.get(`/books/${id}/pages`);
+    return data;
+};
+
+export const deleteAllBooks = async () => {
+    const { data } = await client.delete('/books/delete-all');
+    return data;
+};
+
 // Admin - Gestion des réservations
 export const getPendingReservations = async () => {
     const { data } = await client.get('/admin/reservations/pending');

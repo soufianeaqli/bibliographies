@@ -30,6 +30,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/books/import', [BookController::class, 'importFromGoogle']);
     Route::get('/books', [BookController::class, 'index']);
     Route::post('/books', [BookController::class, 'store']);
+    // Doit être avant /books/{id} pour ne pas être intercepté
+    Route::delete('/books/delete-all', [BookController::class, 'destroyAll'])->middleware('admin');
     Route::delete('/books/{id}', [BookController::class, 'destroy']);
 
     // Détail et lecture des livres
@@ -37,6 +39,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/books/{id}/reserve', [BookDetailController::class, 'reserve']);
     Route::post('/books/{id}/cancel-reservation', [BookDetailController::class, 'cancelReservation']);
     Route::get('/reservations/mine', [BookDetailController::class, 'getMyReservations']);
+
+    // Pages Google Books
+    Route::get('/books/{id}/pages', [BookDetailController::class, 'getPages']);
 
     // Progression de lecture
     Route::get('/books/{id}/reading-progress', [BookDetailController::class, 'getReadingProgress']);
@@ -56,8 +61,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/books/{id}/avis', [BookDetailController::class, 'getAvis']);
     Route::post('/books/{id}/avis', [BookDetailController::class, 'addAvis']);
 
-    // Admin : gestion des réservations
+    // Admin : import massif, gestion des réservations
     Route::middleware('admin')->group(function () {
+        Route::post('/books/import-100', [BookController::class, 'importBooks100']);
         Route::get('/admin/reservations/pending', [AdminController::class, 'pendingReservations']);
         Route::post('/admin/reservations/{id}/approve', [AdminController::class, 'approve']);
         Route::post('/admin/reservations/{id}/reject', [AdminController::class, 'reject']);

@@ -3,45 +3,33 @@ import { useParams, useNavigate } from 'react-router-dom';
 import HTMLFlipBook from 'react-pageflip';
 import {
   ChevronLeft, Maximize, ZoomIn, ZoomOut, Moon, Sun, Bookmark,
-  BookmarkPlus, Loader, MessageSquare, X, Trash2, StickyNote
+  BookmarkPlus, Loader, StickyNote, X, Trash2, FileText
 } from 'lucide-react';
 import {
-  fetchBook, getReadingProgress, updateReadingProgress,
+  fetchBook, getBookPages, getReadingProgress, updateReadingProgress,
   getBookmarks, addBookmark, deleteBookmark,
   getNotes, addNote, deleteNote
 } from '../api/libraryClient';
 
-const Page = React.forwardRef((props, ref) => {
-  return (
-    <div
-      className={`page ${props.darkMode ? 'bg-[#1C1A17] text-gray-300' : 'bg-[#F9F6F0] text-gray-800'} shadow-[inset_0_0_20px_rgba(0,0,0,0.1)] overflow-hidden flex flex-col p-8 md:p-12 h-full`}
-      ref={ref} data-density="soft"
-    >
-      <div className="page-content flex-1">
-        <h2 className="page-header text-xs uppercase tracking-widest text-center mb-8 opacity-50 border-b border-current pb-2">
-          {props.title}
-        </h2>
-        <div
-          className="page-text leading-relaxed text-justify whitespace-pre-line"
-          style={{ fontSize: `${props.fontSize}px` }}
-        >
-          {props.children}
-        </div>
+const Page = React.forwardRef((props, ref) => (
+  <div
+    className={`page ${props.darkMode ? 'bg-[#1C1A17] text-gray-300' : 'bg-[#F9F6F0] text-gray-800'} shadow-[inset_0_0_20px_rgba(0,0,0,0.1)] overflow-hidden flex flex-col p-8 md:p-12 h-full`}
+    ref={ref} data-density="soft"
+  >
+    <div className="page-content flex-1">
+      <h2 className="page-header text-xs uppercase tracking-widest text-center mb-8 opacity-50 border-b border-current pb-2">{props.title}</h2>
+      <div className="page-text leading-relaxed text-justify whitespace-pre-line" style={{ fontSize: `${props.fontSize}px` }}>
+        {props.children}
       </div>
-      <div className="page-footer text-center text-xs opacity-50 mt-4">{props.number}</div>
     </div>
-  );
-});
+    <div className="page-footer text-center text-xs opacity-50 mt-4">{props.number}</div>
+  </div>
+));
 
 const CoverPage = React.forwardRef((props, ref) => (
-  <div
-    className="page page-cover bg-[#2C261A] text-[#D4AF37] flex flex-col justify-center items-center shadow-lg border-2 border-amber-900/50 relative"
-    ref={ref} data-density="hard"
-  >
+  <div className="page page-cover bg-[#2C261A] text-[#D4AF37] flex flex-col justify-center items-center shadow-lg border-2 border-amber-900/50 relative" ref={ref} data-density="hard">
     <div className="absolute inset-0 bg-gradient-to-tr from-black/60 to-transparent"></div>
-    {props.coverImage && (
-      <img src={props.coverImage} alt="" className="absolute inset-0 w-full h-full object-cover opacity-30" />
-    )}
+    {props.coverImage && <img src={props.coverImage} alt="" className="absolute inset-0 w-full h-full object-cover opacity-30" />}
     <h1 className="text-4xl font-serif text-center relative z-10 px-4">{props.title}</h1>
     <p className="mt-8 uppercase tracking-widest text-xs relative z-10">{props.author}</p>
   </div>
@@ -62,6 +50,7 @@ export default function BookReaderPage() {
   const [book, setBook] = useState(null);
   const [loading, setLoading] = useState(true);
   const [pages, setPages] = useState([]);
+  const [bookPages, setBookPages] = useState(null);
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('reader_dark') !== 'false');
   const [fontSize, setFontSize] = useState(() => parseInt(localStorage.getItem('reader_font') || '16'));
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -73,66 +62,55 @@ export default function BookReaderPage() {
   const [showBookmarks, setShowBookmarks] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
   const [newNote, setNewNote] = useState('');
+  const [viewPdf, setViewPdf] = useState(false);
 
-  useEffect(() => {
-    localStorage.setItem('reader_dark', darkMode);
-  }, [darkMode]);
+  useEffect(() => { localStorage.setItem('reader_dark', darkMode); }, [darkMode]);
+  useEffect(() => { localStorage.setItem('reader_font', fontSize); }, [fontSize]);
 
-  useEffect(() => {
-    localStorage.setItem('reader_font', fontSize);
-  }, [fontSize]);
-
-  useEffect(() => {
-    if (!id) return;
-    setLoading(true);
-    Promise.all([
-      fetchBook(id),
-      getReadingProgress(id).catch(() => ({ last_page_read: 0, progress_percentage: 0 })),
-      getBookmarks(id).catch(() => []),
-      getNotes(id).catch(() => []),
-    ])
-      .then(([bookData, prog, bmk, nts]) => {
-        setBook(bookData);
-        setBookmarks(bmk);
-        setNotes(nts);
-
-        // Generate pages from description — split into short clause-sized chunks
-        const raw = bookData.description || 'Aucun contenu disponible pour ce livre.';
-        const parts = raw
-          .replace(/([.!?])\s*/g, '$1|')
-          .split('|')
-          .filter(s => s.trim())
-          .flatMap(s => {
-            if (s.length <= 80) return [s.trim()];
-            const clauses = s.split(/([,;])\s*/).reduce((acc, part, i, arr) => {
-              if (i % 2 === 0) acc.push(part + (arr[i + 1] || ''));
-              return acc;
-            }, []);
-            const result = [];
-            let cur = '';
-            for (const c of clauses) {
-              const next = cur ? cur + ' ' + c.trim() : c.trim();
-              if (next.length > 80 && cur.trim()) {
-                result.push(cur.trim());
-                cur = c.trim();
-              } else {
-                cur = next;
-              }
-            }
-            if (cur.trim()) result.push(cur.trim());
-            return result;
-          });
-        const chunks = parts.filter(p => p.length > 0);
-        setPages(chunks);
-        setTotalPages(chunks.length);
-
-        const startPage = Math.min(prog.last_page_read || 0, Math.max(0, chunks.length - 1));
-        setCurrentPage(startPage + 1);
-        setProgress(prog.progress_percentage || 0);
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [id]);
+  const chunkText = (text) => {
+    const clean = text || 'Aucun contenu disponible pour ce livre.';
+    // Adapter la taille des pages : 200 chars pour les longs textes, 80 pour les courts
+    const targetSize = clean.length > 5000 ? 200 : 80;
+    const paragraphs = clean.split(/\n{2,}/);
+    const chunks = [];
+    for (const para of paragraphs) {
+      const trimmed = para.trim();
+      if (!trimmed) continue;
+      if (trimmed.length <= targetSize) {
+        chunks.push(trimmed);
+      } else {
+        const sentences = trimmed.match(/[^.!?]*[.!?]+|[^.!?]+$/g) || [trimmed];
+        let cur = '';
+        for (const s of sentences) {
+          const t = s.trim();
+          if (!t) continue;
+          if ((cur + ' ' + t).trim().length > targetSize && cur) {
+            chunks.push(cur.trim());
+            cur = t;
+          } else {
+            cur = cur ? cur + ' ' + t : t;
+          }
+        }
+        if (cur.trim()) chunks.push(cur.trim());
+      }
+    }
+    // Fusionner les chunks trop courts (< 30% de targetSize)
+    const minSize = Math.max(20, Math.floor(targetSize * 0.3));
+    const merged = [];
+    for (const chunk of chunks) {
+      if (merged.length > 0 && chunk.length < minSize) {
+        merged[merged.length - 1] += ' ' + chunk;
+      } else if (merged.length > 0 && merged[merged.length - 1].length < minSize) {
+        merged[merged.length - 1] += ' ' + chunk;
+      } else {
+        merged.push(chunk);
+      }
+    }
+    if (merged.length > 1 && merged[merged.length - 1].length < minSize) {
+      merged[merged.length - 2] += ' ' + merged.pop();
+    }
+    return merged.filter(c => c.length > 0);
+  };
 
   const saveProgress = useCallback((page, total) => {
     const pageNum = Math.max(0, parseInt(page, 10) || 0);
@@ -143,6 +121,36 @@ export default function BookReaderPage() {
     if (id) {
       updateReadingProgress(id, { last_page_read: pageNum, progress_percentage: pct }).catch(() => {});
     }
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    setLoading(true);
+    Promise.all([
+      fetchBook(id),
+      getBookPages(id).catch(() => null),
+      getReadingProgress(id).catch(() => ({ last_page_read: 0, progress_percentage: 0 })),
+      getBookmarks(id).catch(() => []),
+      getNotes(id).catch(() => []),
+    ])
+      .then(([bookData, bPages, prog, bmk, nts]) => {
+        setBook(bookData);
+        setBookPages(bPages);
+        setBookmarks(bmk);
+        setNotes(nts);
+
+        // Utiliser le full_text enrichi depuis Google Books (description + snippets + généré)
+        const raw = bPages?.full_text || bookData.description || 'Aucun contenu disponible pour ce livre.';
+        const chunks = chunkText(raw);
+        setPages(chunks);
+        setTotalPages(chunks.length);
+
+        const startPage = Math.min(prog.last_page_read || 0, Math.max(0, chunks.length - 1));
+        setCurrentPage(startPage + 1);
+        setProgress(prog.progress_percentage || 0);
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
   }, [id]);
 
   const handleFlip = (e) => {
@@ -208,6 +216,8 @@ export default function BookReaderPage() {
     );
   }
 
+  const bookPdfPath = bookPages?.book_pdf_path || null;
+
   return (
     <div className={`min-h-screen flex flex-col transition-colors duration-500 ${darkMode ? 'bg-[#0A0908] text-white' : 'bg-[#E5DFD3] text-black'} relative`}>
       {/* Top Bar */}
@@ -218,8 +228,14 @@ export default function BookReaderPage() {
           </button>
           <div className="h-6 w-px bg-current opacity-20"></div>
           <h1 className="font-bold text-lg hidden md:block truncate max-w-xs">{book.titre}</h1>
+          {totalPages > 0 && <span className="text-xs text-gray-500 font-mono">{totalPages} pages</span>}
         </div>
         <div className="flex items-center gap-2">
+          {bookPdfPath && (
+            <button onClick={() => setViewPdf(!viewPdf)} className={`p-2 hover:bg-black/10 rounded-full ${viewPdf ? 'text-[#D4AF37]' : ''}`} title="Voir le PDF">
+              <FileText className="w-5 h-5" />
+            </button>
+          )}
           <button onClick={handleAddBookmark} className="p-2 hover:bg-black/10 rounded-full" title="Ajouter marque-page">
             <BookmarkPlus className="w-5 h-5" />
           </button>
@@ -251,7 +267,12 @@ export default function BookReaderPage() {
 
       <div className="flex flex-1 overflow-hidden">
         {/* Main reader */}
-        <div className="flex-1 flex justify-center items-center p-4 overflow-hidden perspective-[1500px]">
+        <div className="flex-1 flex flex-col justify-center items-center p-4 overflow-hidden perspective-[1500px]">
+          {viewPdf && bookPdfPath ? (
+            <div className="w-full h-full min-h-[80vh]">
+              <embed src={bookPdfPath} type="application/pdf" className="w-full h-full rounded-lg shadow-[0_30px_60px_rgba(0,0,0,0.4)]" />
+            </div>
+          ) : (
           <div className="relative shadow-[0_30px_60px_rgba(0,0,0,0.4)] max-w-full">
             <HTMLFlipBook
               ref={flipRef}
@@ -275,6 +296,7 @@ export default function BookReaderPage() {
               <BackCover key="back" />
             </HTMLFlipBook>
           </div>
+          )}
         </div>
 
         {/* Side panels */}
