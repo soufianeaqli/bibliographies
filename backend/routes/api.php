@@ -19,6 +19,7 @@ Route::post('/login', [AuthController::class, 'login']);
 use App\Http\Controllers\Api\BookController;
 use App\Http\Controllers\Api\BookDetailController;
 use App\Http\Controllers\Api\AdminController;
+use App\Http\Controllers\Api\NotificationController;
 
 /* --- Routes protégées (token Sanctum requis) --- */
 Route::middleware('auth:sanctum')->group(function () {
@@ -60,6 +61,18 @@ Route::middleware('auth:sanctum')->group(function () {
     // Avis / Commentaires
     Route::get('/books/{id}/avis', [BookDetailController::class, 'getAvis']);
     Route::post('/books/{id}/avis', [BookDetailController::class, 'addAvis']);
+
+    // Favoris
+    Route::get('/favoris', [BookDetailController::class, 'getFavoris']);
+    Route::get('/books/{id}/is-favori', [BookDetailController::class, 'isFavori']);
+    Route::post('/books/{id}/favori', [BookDetailController::class, 'addFavori']);
+    Route::delete('/books/{id}/favori', [BookDetailController::class, 'removeFavori']);
+
+    // Notifications
+    Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount']);
+    Route::patch('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
+    Route::patch('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
 
     // Admin : import massif, gestion des réservations
     Route::middleware('admin')->group(function () {

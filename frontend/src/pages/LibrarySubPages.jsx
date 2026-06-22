@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Home, LayoutGrid, Star, Clock, FileText, Tag, User, Settings, Play, BookOpen, Trash2, Edit2, Search, ArrowRight, ShieldCheck, ChevronRight, Sparkles } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Home, LayoutGrid, Star, Clock, FileText, Tag, User, Settings, Play, BookOpen, Trash2, Edit2, Search, ArrowRight, ShieldCheck, ChevronRight, Sparkles, Heart, Loader } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { fetchBooks } from '../api/libraryClient';
+import { fetchBooks, getFavoris, removeFavori, reserveBook } from '../api/libraryClient';
 
 const PageHeader = ({ icon: Icon, title, desc }) => (
   <div className="px-8 pt-10 pb-6 relative z-10">
@@ -29,6 +29,22 @@ const PageContainer = ({ children }) => (
     </div>
   </div>
 );
+
+const getTimeAgo = (dateStr) => {
+  if (!dateStr) return '';
+  const now = new Date();
+  const date = new Date(dateStr);
+  const diffMs = now - date;
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+  if (diffMins < 1) return "À l'instant";
+  if (diffMins < 60) return `Il y a ${diffMins} min`;
+  if (diffHours < 24) return `Il y a ${diffHours}h`;
+  if (diffDays === 1) return 'Hier';
+  if (diffDays < 7) return `Il y a ${diffDays} jours`;
+  return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+};
 
 export const Accueil = () => {
   const { utilisateur } = useAuth();
@@ -277,39 +293,114 @@ export const Categories = () => {
   );
 };
 
-export const Favoris = () => (
-  <PageContainer>
-    <PageHeader icon={Star} title="Favoris" desc="Vos ouvrages précieux conservés ici." />
-    <div className="px-8 mt-4 pb-12">
-       {/* List Layout */}
-       <div className="space-y-4">
-         {[
-           { title: 'L\'Alchimiste', author: 'Paulo Coelho', added: 'Ajouté hier', img:'https://images.unsplash.com/photo-1512820790803-83ca734da794?q=80&w=150' },
-           { title: 'Le Petit Prince', author: 'Antoine de Saint-Exupéry', added: 'Il y a 1 semaine', img:'https://images.unsplash.com/photo-1629196914275-f86050b4a4d6?q=80&w=150' },
-         ].map((fav, i) => (
-            <div key={i} className="flex items-center gap-6 bg-[#14120E]/80 backdrop-blur-md border border-[#2C261A] p-4 rounded-2xl hover:border-[#D4AF37]/50 transition-colors shadow-lg group">
-               <div className="w-16 h-24 rounded overflow-hidden shadow-md">
-                 <img src={fav.img} alt={fav.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-               </div>
-               <div className="flex-1">
-                 <h3 className="text-xl font-bold text-white">{fav.title}</h3>
-                 <p className="text-gray-400">{fav.author}</p>
-                 <p className="text-xs text-[#D4AF37] mt-2">{fav.added}</p>
-               </div>
-               <div className="px-4 flex gap-3">
-                 <button className="w-10 h-10 rounded-full bg-[#1C1812] border border-[#2C261A] flex items-center justify-center text-[#D4AF37] hover:bg-[#D4AF37] hover:text-black transition-colors">
-                   <Play className="w-4 h-4 fill-current"/>
-                 </button>
-                 <button className="w-10 h-10 rounded-full bg-[#1C1812] border border-[#2C261A] flex items-center justify-center text-red-400 hover:bg-red-400/20 transition-colors">
-                   <Trash2 className="w-4 h-4"/>
-                 </button>
-               </div>
-            </div>
-         ))}
-       </div>
-    </div>
-  </PageContainer>
-);
+export const Favoris = () => {
+  const [favoris, setFavoris] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [reservingIds, setReservingIds] = useState(new Set());
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    getFavoris()
+      .then(setFavoris)
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleRemove = async (id) => {
+    try {
+      await removeFavori(id);
+      setFavoris(prev => prev.filter(f => f.reference_id !== id));
+    } catch {}
+  };
+
+  const handleReserve = async (bookId) => {
+    setReservingIds(prev => new Set(prev).add(bookId));
+    try {
+      await reserveBook(bookId);
+      alert('Livre réservé avec succès !');
+    } catch (e) {
+      alert(e?.response?.data?.message || 'Erreur lors de la réservation.');
+    } finally {
+      setReservingIds(prev => { const s = new Set(prev); s.delete(bookId); return s; });
+    }
+  };
+
+  return (
+    <PageContainer>
+      <PageHeader icon={Star} title="Favoris" desc="Vos ouvrages précieux conservés ici." />
+      <div className="px-8 mt-4 pb-12">
+        {loading ? (
+          <div className="space-y-4">
+            {[1,2,3].map(i => (
+              <div key={i} className="flex items-center gap-6 bg-[#14120E]/80 border border-[#2C261A] p-4 rounded-2xl animate-pulse">
+                <div className="w-16 h-24 rounded bg-[#2C261A]"></div>
+                <div className="flex-1 space-y-2">
+                  <div className="h-5 bg-[#2C261A] rounded w-48"></div>
+                  <div className="h-4 bg-[#2C261A] rounded w-32"></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : favoris.length === 0 ? (
+          <div className="text-center py-20 bg-[#14120E]/50 rounded-2xl border border-[#2C261A]">
+            <Heart className="w-16 h-16 text-[#D4AF37] mx-auto mb-4 opacity-40" />
+            <p className="text-gray-400 text-lg mb-2">Aucun favori</p>
+            <p className="text-gray-600 text-sm">Ajoutez des livres à vos favoris depuis la bibliothèque.</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {favoris.map((fav) => {
+              const book = fav.reference;
+              if (!book) return null;
+              const cover = book.cover_image;
+              const timeAgo = getTimeAgo(fav.created_at);
+              const isReserving = reservingIds.has(book.id);
+              return (
+                <div key={fav.id} className="flex items-center gap-6 bg-[#14120E]/80 backdrop-blur-md border border-[#2C261A] p-4 rounded-2xl hover:border-[#D4AF37]/50 transition-colors shadow-lg group">
+                  <div
+                    onClick={() => navigate(`/book/${book.id}`)}
+                    className="w-16 h-24 rounded overflow-hidden shadow-md cursor-pointer shrink-0"
+                  >
+                    {cover
+                      ? <img src={cover} alt={book.titre} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                      : <div className="w-full h-full bg-[#1C1812] flex items-center justify-center text-[8px] text-gray-500 font-bold p-1 text-center">{book.titre}</div>
+                    }
+                  </div>
+                  <div
+                    onClick={() => navigate(`/book/${book.id}`)}
+                    className="flex-1 min-w-0 cursor-pointer"
+                  >
+                    <h3 className="text-xl font-bold text-white truncate group-hover:text-[#D4AF37] transition-colors">{book.titre}</h3>
+                    <p className="text-gray-400 truncate">{book.auteur}</p>
+                    <p className="text-xs text-[#D4AF37] mt-2">{timeAgo}</p>
+                  </div>
+                  <div className="px-4 flex gap-3 shrink-0">
+                    <button
+                      onClick={() => handleReserve(book.id)}
+                      disabled={isReserving}
+                      className="w-10 h-10 rounded-full bg-[#1C1812] border border-[#2C261A] flex items-center justify-center text-[#D4AF37] hover:bg-[#D4AF37] hover:text-black transition-colors disabled:opacity-50"
+                    >
+                      {isReserving
+                        ? <Loader className="w-4 h-4 animate-spin" />
+                        : <BookOpen className="w-4 h-4" />
+                      }
+                    </button>
+                    <button
+                      onClick={() => handleRemove(fav.reference_id)}
+                      className="w-10 h-10 rounded-full bg-[#1C1812] border border-[#2C261A] flex items-center justify-center text-red-400 hover:bg-red-400/20 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4"/>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </PageContainer>
+  );
+};
 
 export const Historiques = () => (
   <PageContainer>

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -92,6 +93,18 @@ class Utilisateur extends Authenticatable
     public function partagesEnvoyes(): HasMany
     {
         return $this->hasMany(Partage::class, 'expediteur_id');
+    }
+
+    /** Favoris de l'utilisateur (1 → 0..*). */
+    public function favoris(): HasMany
+    {
+        return $this->hasMany(Favori::class, 'utilisateur_id');
+    }
+
+    /** Références favorites (N:N via favori). */
+    public function favorisReferences(): BelongsToMany
+    {
+        return $this->belongsToMany(Reference::class, 'favori', 'utilisateur_id', 'reference_id');
     }
 
     /** Partages reçus (l'utilisateur est le destinataire). */

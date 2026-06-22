@@ -8,6 +8,9 @@ use App\Models\Reservation;
 use App\Models\HistoriqueLecture;
 use App\Models\Bookmark;
 use App\Models\Avis;
+use App\Models\Favori;
+use App\Models\Notification;
+use App\Models\Utilisateur;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
@@ -70,6 +73,19 @@ class BookDetailController extends Controller
             'reference_id' => $id,
             'status' => 'pending',
         ]);
+
+        // Notify all admins
+        $admins = Utilisateur::where('role', 'administrateur')->get();
+        $userName = Auth::user()->nom;
+        $bookTitle = $reference->titre;
+        foreach ($admins as $admin) {
+            Notification::create([
+                'utilisateur_id' => $admin->id,
+                'type' => 'new_reservation',
+                'message' => "{$userName} a réservé « {$bookTitle} ».",
+                'reference_id' => $id,
+            ]);
+        }
 
         return response()->json(['message' => 'Livre réservé avec succès !', 'reserved' => true], 201);
     }
@@ -258,6 +274,61 @@ class BookDetailController extends Controller
         return response()->json($avis->load('utilisateur'), 201);
     }
 
+    public function addFavori($id)
+    {
+        $reference = Reference::findOrFail($id);
+
+        $existing = Favori::where('utilisateur_id', Auth::id())
+            ->where('reference_id', $id)
+            ->first();
+
+        if ($existing) {
+            return response()->json(['message' => 'Déjà dans vos favoris.', 'favori' => true]);
+        }
+
+        $favori = Favori::create([
+            'utilisateur_id' => Auth::id(),
+            'reference_id' => $id,
+        ]);
+
+        return response()->json(['message' => 'Ajouté aux favoris !', 'favori' => true], 201);
+    }
+
+    public function removeFavori($id)
+    {
+        Favori::where('utilisateur_id', Auth::id())
+            ->where('reference_id', $id)
+            ->delete();
+
+        return response()->json(['message' => 'Retiré des favoris.', 'favori' => false]);
+    }
+
+    public function getFavoris()
+    {
+        $favoris = Favori::where('utilisateur_id', Auth::id())
+            ->with('reference')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $favoris->transform(function ($fav) {
+            if ($fav->reference && $fav->reference->cover_image && !str_starts_with($fav->reference->cover_image, 'http')) {
+                $fav->reference->cover_image = url('storage/' . $fav->reference->cover_image);
+            }
+            return $fav;
+        });
+
+        return response()->json($favoris);
+    }
+
+    public function isFavori($id)
+    {
+        $exists = Favori::where('utilisateur_id', Auth::id())
+            ->where('reference_id', $id)
+            ->exists();
+
+        return response()->json(['favori' => $exists]);
+    }
+
     public function getMyReservations()
     {
         $reservations = Reservation::where('utilisateur_id', Auth::id())
@@ -419,7 +490,7 @@ class BookDetailController extends Controller
                         $queryWords = preg_split('/[\s\'\-]+/', $qLower);
                         $queryMatch = 0;
                         foreach ($queryWords as $qw) {
-                            if (mb_strlen($qw) < 4) continue;
+                            if (mb_strlen($qw) < 3) continue;
                             if (str_contains($gTitleNorm, $qw)) $queryMatch++;
                         }
                         if ($queryMatch >= 1) {

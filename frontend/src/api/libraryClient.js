@@ -127,3 +127,45 @@ export const rejectReservation = async (id) => {
     const { data } = await client.post(`/admin/reservations/${id}/reject`);
     return data;
 };
+
+// Favoris
+export const getFavoris = async () => {
+    const { data } = await client.get('/favoris');
+    return data;
+};
+
+export const isFavori = async (id) => {
+    const { data } = await client.get(`/books/${id}/is-favori`);
+    return data;
+};
+
+export const addFavori = async (id) => {
+    const { data } = await client.post(`/books/${id}/favori`);
+    return data;
+};
+
+export const removeFavori = async (id) => {
+    const { data } = await client.delete(`/books/${id}/favori`);
+    return data;
+};
+
+// Notifications
+export const getNotifications = async () => {
+    const { data } = await client.get('/notifications');
+    return data;
+};
+
+export const getUnreadNotificationCount = async () => {
+    const { data } = await client.get('/notifications/unread-count');
+    return data;
+};
+
+export const markNotificationRead = async (id) => {
+    const { data } = await client.patch(`/notifications/${id}/read`);
+    return data;
+};
+
+export const markAllNotificationsRead = async () => {
+    const { data } = await client.patch('/notifications/read-all');
+    return data;
+};

@@ -1,126 +1,151 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import HTMLFlipBook from 'react-pageflip';
+import Book3D from '../components/Book3D';
 import {
-  ChevronLeft, Maximize, ZoomIn, ZoomOut, Moon, Sun, Bookmark,
-  BookmarkPlus, Loader, StickyNote, X, Trash2, FileText
+  ChevronLeft, ChevronRight, Maximize, Minimize,
+  Moon, Sun, Bookmark, BookmarkPlus, Loader, X,
+  Search, Settings, Volume2, VolumeX, ArrowLeft,
 } from 'lucide-react';
 import {
   fetchBook, getBookPages, getReadingProgress, updateReadingProgress,
   getBookmarks, addBookmark, deleteBookmark,
-  getNotes, addNote, deleteNote
 } from '../api/libraryClient';
 
-const Page = React.forwardRef((props, ref) => (
-  <div
-    className={`page ${props.darkMode ? 'bg-[#1C1A17] text-gray-300' : 'bg-[#F9F6F0] text-gray-800'} shadow-[inset_0_0_20px_rgba(0,0,0,0.1)] overflow-hidden flex flex-col p-8 md:p-12 h-full`}
-    ref={ref} data-density="soft"
-  >
-    <div className="page-content flex-1">
-      <h2 className="page-header text-xs uppercase tracking-widest text-center mb-8 opacity-50 border-b border-current pb-2">{props.title}</h2>
-      <div className="page-text leading-relaxed text-justify whitespace-pre-line" style={{ fontSize: `${props.fontSize}px` }}>
-        {props.children}
-      </div>
-    </div>
-    <div className="page-footer text-center text-xs opacity-50 mt-4">{props.number}</div>
-  </div>
-));
+const SETTINGS_KEY = 'reader_settings_v2';
 
-const CoverPage = React.forwardRef((props, ref) => (
-  <div className="page page-cover bg-[#2C261A] text-[#D4AF37] flex flex-col justify-center items-center shadow-lg border-2 border-amber-900/50 relative" ref={ref} data-density="hard">
-    <div className="absolute inset-0 bg-gradient-to-tr from-black/60 to-transparent"></div>
-    {props.coverImage && <img src={props.coverImage} alt="" className="absolute inset-0 w-full h-full object-cover opacity-30" />}
-    <h1 className="text-4xl font-serif text-center relative z-10 px-4">{props.title}</h1>
-    <p className="mt-8 uppercase tracking-widest text-xs relative z-10">{props.author}</p>
-  </div>
-));
+const defaultSettings = {
+  darkMode: false,
+  fontSize: 16,
+  fontFamily: 'Georgia, "Times New Roman", serif',
+  lineHeight: 1.8,
+  soundEnabled: true,
+};
 
-const BackCover = React.forwardRef((props, ref) => (
-  <div className="page page-cover bg-[#2C261A] border-2 border-amber-900/50 shadow-lg" ref={ref} data-density="hard">
-    <div className="w-full h-full bg-gradient-to-bl from-black/60 to-transparent flex items-center justify-center text-amber-900">
-      Fin du livre
-    </div>
-  </div>
-));
+function loadSettings() {
+  try {
+    const saved = localStorage.getItem(SETTINGS_KEY);
+    return saved ? { ...defaultSettings, ...JSON.parse(saved) } : defaultSettings;
+  } catch { return defaultSettings; }
+}
+
+function persistSettings(s) {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+}
+
+let audioCtx = null;
+function playPageSound() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const dur = 0.18;
+    const len = audioCtx.sampleRate * dur;
+    const buf = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) {
+      const t = i / audioCtx.sampleRate;
+      data[i] = (Math.random() * 2 - 1) * Math.exp(-t * 35) * 0.12 *
+        (1 + 0.3 * Math.sin(t * 200));
+    }
+    const src = audioCtx.createBufferSource();
+    src.buffer = buf;
+    const filt = audioCtx.createBiquadFilter();
+    filt.type = 'lowpass';
+    filt.frequency.value = 1200;
+    const gain = audioCtx.createGain();
+    gain.gain.value = 0.25;
+    src.connect(filt);
+    filt.connect(gain);
+    gain.connect(audioCtx.destination);
+    src.start();
+  } catch {}
+}
+
+function chunkText(text, targetSize = 280) {
+  const clean = text || '';
+  if (!clean) return ['Aucun contenu disponible pour ce livre.'];
+  const paragraphs = clean.split(/\n{2,}/);
+  const chunks = [];
+  for (const para of paragraphs) {
+    const trimmed = para.trim();
+    if (!trimmed) continue;
+    if (trimmed.length <= targetSize) {
+      chunks.push(trimmed);
+    } else {
+      const sentences = trimmed.match(/[^.!?]*[.!?]+|[^.!?]+$/g) || [trimmed];
+      let cur = '';
+      for (const s of sentences) {
+        const t = s.trim();
+        if (!t) continue;
+        if ((cur + ' ' + t).trim().length > targetSize && cur) {
+          chunks.push(cur.trim());
+          cur = t;
+        } else {
+          cur = cur ? cur + ' ' + t : t;
+        }
+      }
+      if (cur.trim()) chunks.push(cur.trim());
+    }
+  }
+  const minLen = Math.max(30, Math.floor(targetSize * 0.3));
+  const merged = [];
+  for (const chunk of chunks) {
+    if (merged.length > 0 && chunk.length < minLen) {
+      merged[merged.length - 1] += ' ' + chunk;
+    } else if (merged.length > 0 && merged[merged.length - 1].length < minLen) {
+      merged[merged.length - 1] += ' ' + chunk;
+    } else {
+      merged.push(chunk);
+    }
+  }
+  if (merged.length > 1 && merged[merged.length - 1].length < minLen) {
+    merged[merged.length - 2] += ' ' + merged.pop();
+  }
+  return merged.filter(c => c.length > 0);
+}
 
 export default function BookReaderPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const flipRef = useRef();
+  const bookRef = useRef(null);
+  const searchRef = useRef(null);
+
   const [book, setBook] = useState(null);
   const [loading, setLoading] = useState(true);
   const [pages, setPages] = useState([]);
-  const [bookPages, setBookPages] = useState(null);
-  const [darkMode, setDarkMode] = useState(() => localStorage.getItem('reader_dark') !== 'false');
-  const [fontSize, setFontSize] = useState(() => parseInt(localStorage.getItem('reader_font') || '16'));
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [settings, setSettings] = useState(loadSettings);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
   const [progress, setProgress] = useState(0);
   const [bookmarks, setBookmarks] = useState([]);
-  const [notes, setNotes] = useState([]);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isTurning, setIsTurning] = useState(false);
+  const [showUI, setShowUI] = useState(true);
   const [showBookmarks, setShowBookmarks] = useState(false);
-  const [showNotes, setShowNotes] = useState(false);
-  const [newNote, setNewNote] = useState('');
-  const [viewPdf, setViewPdf] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchIdx, setSearchIdx] = useState(-1);
 
-  useEffect(() => { localStorage.setItem('reader_dark', darkMode); }, [darkMode]);
-  useEffect(() => { localStorage.setItem('reader_font', fontSize); }, [fontSize]);
+  const uiTimer = useRef(null);
+  const saveTimer = useRef(null);
+  const darkMode = settings.darkMode;
 
-  const chunkText = (text) => {
-    const clean = text || 'Aucun contenu disponible pour ce livre.';
-    // Adapter la taille des pages : 200 chars pour les longs textes, 80 pour les courts
-    const targetSize = clean.length > 5000 ? 200 : 80;
-    const paragraphs = clean.split(/\n{2,}/);
-    const chunks = [];
-    for (const para of paragraphs) {
-      const trimmed = para.trim();
-      if (!trimmed) continue;
-      if (trimmed.length <= targetSize) {
-        chunks.push(trimmed);
-      } else {
-        const sentences = trimmed.match(/[^.!?]*[.!?]+|[^.!?]+$/g) || [trimmed];
-        let cur = '';
-        for (const s of sentences) {
-          const t = s.trim();
-          if (!t) continue;
-          if ((cur + ' ' + t).trim().length > targetSize && cur) {
-            chunks.push(cur.trim());
-            cur = t;
-          } else {
-            cur = cur ? cur + ' ' + t : t;
-          }
-        }
-        if (cur.trim()) chunks.push(cur.trim());
-      }
-    }
-    // Fusionner les chunks trop courts (< 30% de targetSize)
-    const minSize = Math.max(20, Math.floor(targetSize * 0.3));
-    const merged = [];
-    for (const chunk of chunks) {
-      if (merged.length > 0 && chunk.length < minSize) {
-        merged[merged.length - 1] += ' ' + chunk;
-      } else if (merged.length > 0 && merged[merged.length - 1].length < minSize) {
-        merged[merged.length - 1] += ' ' + chunk;
-      } else {
-        merged.push(chunk);
-      }
-    }
-    if (merged.length > 1 && merged[merged.length - 1].length < minSize) {
-      merged[merged.length - 2] += ' ' + merged.pop();
-    }
-    return merged.filter(c => c.length > 0);
-  };
+  useEffect(() => { persistSettings(settings); }, [settings]);
+
+  const updateSetting = useCallback((k, v) => {
+    setSettings(p => ({ ...p, [k]: v }));
+  }, []);
 
   const saveProgress = useCallback((page, total) => {
-    const pageNum = Math.max(0, parseInt(page, 10) || 0);
-    const totalNum = Math.max(1, parseInt(total, 10) || 1);
-    const pct = Math.min(100, Math.round((pageNum / totalNum) * 100));
+    const p = Math.max(0, parseInt(page, 10) || 0);
+    const t = Math.max(1, parseInt(total, 10) || 1);
+    const pct = Math.min(100, Math.round((p / t) * 100));
     setProgress(pct);
-    setCurrentPage(pageNum + 1);
-    if (id) {
-      updateReadingProgress(id, { last_page_read: pageNum, progress_percentage: pct }).catch(() => {});
-    }
+    setCurrentPage(p + 1);
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      if (id) updateReadingProgress(id, { last_page_read: p, progress_percentage: pct }).catch(() => {});
+    }, 800);
   }, [id]);
 
   useEffect(() => {
@@ -131,39 +156,80 @@ export default function BookReaderPage() {
       getBookPages(id).catch(() => null),
       getReadingProgress(id).catch(() => ({ last_page_read: 0, progress_percentage: 0 })),
       getBookmarks(id).catch(() => []),
-      getNotes(id).catch(() => []),
     ])
-      .then(([bookData, bPages, prog, bmk, nts]) => {
+      .then(([bookData, bPages, prog, bmk]) => {
         setBook(bookData);
-        setBookPages(bPages);
         setBookmarks(bmk);
-        setNotes(nts);
-
-        // Utiliser le full_text enrichi depuis Google Books (description + snippets + généré)
-        const raw = bPages?.full_text || bookData.description || 'Aucun contenu disponible pour ce livre.';
-        const chunks = chunkText(raw);
+        const raw = bPages?.full_text || bookData.description || '';
+        const len = raw.length;
+        let cs = 280;
+        if (len > 300000) cs = 420;
+        else if (len > 150000) cs = 340;
+        else if (len > 50000) cs = 300;
+        const chunks = chunkText(raw, cs);
         setPages(chunks);
         setTotalPages(chunks.length);
-
-        const startPage = Math.min(prog.last_page_read || 0, Math.max(0, chunks.length - 1));
-        setCurrentPage(startPage + 1);
+        const start = Math.min(prog.last_page_read || 0, Math.max(0, chunks.length - 1));
+        setCurrentPage(start + 1);
         setProgress(prog.progress_percentage || 0);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [id]);
 
-  const handleFlip = (e) => {
-    const page = e.data;
-    saveProgress(page, totalPages);
-  };
+  const onTurnComplete = useCallback(() => {
+    setIsTurning(false);
+    const next = Math.min(currentPage + 1, totalPages);
+    setCurrentPage(next);
+    const pct = Math.min(100, Math.round((next / totalPages) * 100));
+    setProgress(pct);
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      if (id) updateReadingProgress(id, { last_page_read: next - 1, progress_percentage: pct }).catch(() => {});
+    }, 800);
+  }, [currentPage, totalPages, id]);
+
+  const onTurnBackComplete = useCallback(() => {
+    setIsTurning(false);
+    const prev = Math.max(1, currentPage - 1);
+    setCurrentPage(prev);
+    const pct = Math.min(100, Math.round((prev / totalPages) * 100));
+    setProgress(pct);
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      if (id) updateReadingProgress(id, { last_page_read: prev - 1, progress_percentage: pct }).catch(() => {});
+    }, 800);
+  }, [currentPage, totalPages, id]);
+
+  const nextPage = useCallback(() => {
+    if (currentPage < totalPages && !isTurning && bookRef.current?.turnForward) {
+      if (settings.soundEnabled) playPageSound();
+      setIsTurning(true);
+      bookRef.current.turnForward();
+    }
+  }, [currentPage, totalPages, isTurning, settings.soundEnabled]);
+
+  const prevPage = useCallback(() => {
+    if (currentPage > 1 && !isTurning && bookRef.current?.turnBackward) {
+      if (settings.soundEnabled) playPageSound();
+      setIsTurning(true);
+      bookRef.current.turnBackward();
+    }
+  }, [currentPage, isTurning, settings.soundEnabled]);
+
+  const goToPage = useCallback((pageNum) => {
+    const p = Math.max(1, Math.min(pageNum, totalPages));
+    setCurrentPage(p);
+    const pct = Math.min(100, Math.round((p / totalPages) * 100));
+    setProgress(pct);
+  }, [totalPages]);
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen();
+      document.documentElement.requestFullscreen?.();
       setIsFullscreen(true);
     } else {
-      document.exitFullscreen();
+      document.exitFullscreen?.();
       setIsFullscreen(false);
     }
   };
@@ -173,193 +239,490 @@ export default function BookReaderPage() {
     try {
       const bm = await addBookmark(id, { page_number: currentPage, note: '' });
       setBookmarks(prev => [...prev, bm].sort((a, b) => a.page_number - b.page_number));
-    } catch (err) { console.error(err); }
+    } catch {}
   };
 
   const handleDeleteBookmark = async (bmId) => {
     try {
       await deleteBookmark(bmId);
       setBookmarks(prev => prev.filter(b => b.id !== bmId));
-    } catch (err) { console.error(err); }
+    } catch {}
   };
 
-  const handleAddNote = async () => {
-    if (!id || !newNote.trim()) return;
-    try {
-      const note = await addNote(id, { page_number: currentPage, text: newNote });
-      setNotes(prev => [...prev, note]);
-      setNewNote('');
-    } catch (err) { console.error(err); }
-  };
+  const performSearch = useCallback((q) => {
+    if (!q.trim()) { setSearchResults([]); setSearchIdx(-1); return; }
+    const results = [];
+    const lower = q.toLowerCase();
+    for (let i = 0; i < pages.length; i++) {
+      if (pages[i].toLowerCase().includes(lower)) {
+        results.push({ page: i + 1, preview: pages[i].substring(0, 120).replace(/\n/g, ' ') });
+      }
+    }
+    setSearchResults(results);
+    setSearchIdx(results.length > 0 ? 0 : -1);
+    if (results.length > 0) goToPage(results[0].page);
+  }, [pages, goToPage]);
 
-  const handleDeleteNote = async (noteId) => {
-    try {
-      await deleteNote(id, noteId);
-      setNotes(prev => prev.filter(n => n.id !== noteId));
-    } catch (err) { console.error(err); }
-  };
+  const navigateSearch = useCallback((dir) => {
+    if (searchResults.length === 0) return;
+    const ni = dir === 'next'
+      ? (searchIdx + 1) % searchResults.length
+      : (searchIdx - 1 + searchResults.length) % searchResults.length;
+    setSearchIdx(ni);
+    goToPage(searchResults[ni].page);
+  }, [searchResults, searchIdx, goToPage]);
+
+  useEffect(() => {
+    const handleKey = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      switch (e.key) {
+        case 'ArrowRight': e.preventDefault(); nextPage(); break;
+        case 'ArrowLeft': e.preventDefault(); prevPage(); break;
+        case 'f': case 'F': if (!e.ctrlKey && !e.metaKey) { e.preventDefault(); toggleFullscreen(); } break;
+        case 's': case 'S': if (!e.ctrlKey && !e.metaKey) { e.preventDefault(); setShowSearch(v => !v); } break;
+        case 'b': case 'B': if (!e.ctrlKey && !e.metaKey) { e.preventDefault(); handleAddBookmark(); } break;
+        case 'Escape': setShowSearch(false); setShowSettings(false); setShowBookmarks(false); break;
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [nextPage, prevPage, toggleFullscreen, handleAddBookmark]);
+
+  const handleMouseMove = useCallback(() => {
+    setShowUI(true);
+    if (uiTimer.current) clearTimeout(uiTimer.current);
+    uiTimer.current = setTimeout(() => {
+      if (!showSearch && !showSettings && !showBookmarks) setShowUI(false);
+    }, 3500);
+  }, [showSearch, showSettings, showBookmarks]);
+
+  useEffect(() => {
+    return () => { if (uiTimer.current) clearTimeout(uiTimer.current); };
+  }, []);
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0E0C0A] flex items-center justify-center">
-        <Loader className="w-10 h-10 text-[#D4AF37] animate-spin" />
+      <div className="h-screen flex flex-col items-center justify-center gap-4"
+        style={{ background: '#0D0B09' }}>
+        <Loader className="w-10 h-10 animate-spin" style={{ color: '#D4AF37' }} />
+        <span className="text-sm" style={{ color: 'rgba(212,175,55,0.6)' }}>
+          Ouverture du livre...
+        </span>
       </div>
     );
   }
 
   if (!book) {
     return (
-      <div className="min-h-screen bg-[#0E0C0A] flex items-center justify-center text-gray-400">
-        Livre introuvable.
-        <button onClick={() => navigate('/bibliotheque')} className="ml-4 text-[#D4AF37] underline">Retour</button>
+      <div className="h-screen flex flex-col items-center justify-center gap-4"
+        style={{ background: '#0D0B09', color: '#888' }}>
+        <span>Livre introuvable.</span>
+        <button onClick={() => navigate('/bibliotheque')}
+          className="px-4 py-2 text-sm rounded-lg transition-all"
+          style={{ background: 'rgba(212,175,55,0.15)', color: '#D4AF37' }}>
+          Retour
+        </button>
       </div>
     );
   }
 
-  const bookPdfPath = bookPages?.book_pdf_path || null;
+  const isBookmarked = bookmarks.some(b => b.page_number === currentPage);
 
   return (
-    <div className={`min-h-screen flex flex-col transition-colors duration-500 ${darkMode ? 'bg-[#0A0908] text-white' : 'bg-[#E5DFD3] text-black'} relative`}>
-      {/* Top Bar */}
-      <div className={`header flex justify-between items-center p-4 ${darkMode ? 'bg-[#14120E]' : 'bg-[#F0ECE1]'} shadow-md z-10`}>
-        <div className="flex items-center gap-4">
-          <button onClick={() => navigate('/bibliotheque')} className="p-2 hover:bg-black/10 rounded-full transition-colors flex items-center gap-2">
-            <ChevronLeft className="w-5 h-5" /> <span className="font-medium hidden sm:inline">Retour</span>
-          </button>
-          <div className="h-6 w-px bg-current opacity-20"></div>
-          <h1 className="font-bold text-lg hidden md:block truncate max-w-xs">{book.titre}</h1>
-          {totalPages > 0 && <span className="text-xs text-gray-500 font-mono">{totalPages} pages</span>}
+    <div
+      className="h-screen w-screen overflow-hidden relative select-none"
+      style={{ background: darkMode ? '#0D0B09' : '#C8BCA8', cursor: isTurning ? 'wait' : 'default' }}
+      onMouseMove={handleMouseMove}
+    >
+      {/* Book - centered */}
+      <div className="absolute inset-0 flex items-center justify-center" style={{ padding: '2%' }}>
+        <div className="w-full h-full" style={{ maxWidth: '920px', maxHeight: '88vh' }}>
+          <Book3D
+            ref={bookRef}
+            pages={pages}
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onTurnPage={onTurnComplete}
+            onTurnBack={onTurnBackComplete}
+            darkMode={darkMode}
+            fontSize={settings.fontSize}
+            fontFamily={settings.fontFamily}
+            lineHeight={settings.lineHeight}
+          />
         </div>
-        <div className="flex items-center gap-2">
-          {bookPdfPath && (
-            <button onClick={() => setViewPdf(!viewPdf)} className={`p-2 hover:bg-black/10 rounded-full ${viewPdf ? 'text-[#D4AF37]' : ''}`} title="Voir le PDF">
-              <FileText className="w-5 h-5" />
-            </button>
-          )}
-          <button onClick={handleAddBookmark} className="p-2 hover:bg-black/10 rounded-full" title="Ajouter marque-page">
-            <BookmarkPlus className="w-5 h-5" />
+      </div>
+
+      {/* Click zones */}
+      <div
+        className="absolute inset-0 z-10 flex pointer-events-none"
+        style={{ padding: '5% 15% 10%' }}
+      >
+        <div
+          className="flex-1 pointer-events-auto cursor-pointer"
+          onClick={prevPage}
+          style={{ cursor: currentPage > 1 ? 'pointer' : 'default' }}
+        />
+        <div className="w-16" />
+        <div
+          className="flex-1 pointer-events-auto cursor-pointer"
+          onClick={nextPage}
+          style={{ cursor: currentPage < totalPages ? 'pointer' : 'default' }}
+        />
+      </div>
+
+      {/* Navigation arrows */}
+      {currentPage > 1 && !isTurning && (
+        <button
+          onClick={(e) => { e.stopPropagation(); prevPage(); }}
+          className="absolute left-4 top-1/2 -translate-y-1/2 z-30 p-3 rounded-full transition-all duration-300 hover:scale-110"
+          style={{
+            background: 'rgba(0,0,0,0.3)',
+            backdropFilter: 'blur(8px)',
+            color: 'rgba(255,255,255,0.8)',
+            opacity: showUI ? 1 : 0.2,
+          }}
+        >
+          <ChevronLeft className="w-6 h-6" />
+        </button>
+      )}
+      {currentPage < totalPages && !isTurning && (
+        <button
+          onClick={(e) => { e.stopPropagation(); nextPage(); }}
+          className="absolute right-4 top-1/2 -translate-y-1/2 z-30 p-3 rounded-full transition-all duration-300 hover:scale-110"
+          style={{
+            background: 'rgba(0,0,0,0.3)',
+            backdropFilter: 'blur(8px)',
+            color: 'rgba(255,255,255,0.8)',
+            opacity: showUI ? 1 : 0.2,
+          }}
+        >
+          <ChevronRight className="w-6 h-6" />
+        </button>
+      )}
+
+      {/* Top bar */}
+      <header
+        className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-5 py-3 transition-all duration-500"
+        style={{
+          background: darkMode
+            ? 'linear-gradient(180deg, rgba(13,11,9,0.92) 0%, transparent 100%)'
+            : 'linear-gradient(180deg, rgba(200,188,168,0.92) 0%, transparent 100%)',
+          opacity: showUI ? 1 : 0,
+          pointerEvents: showUI ? 'auto' : 'none',
+        }}
+      >
+        <div className="flex items-center gap-3">
+          <button onClick={() => navigate('/bibliotheque')}
+            className="p-2 rounded-full transition-all duration-200 hover:scale-110"
+            style={{ background: 'rgba(0,0,0,0.25)', color: 'rgba(255,255,255,0.8)' }}>
+            <ArrowLeft className="w-4 h-4" />
           </button>
-          <button onClick={() => setShowBookmarks(!showBookmarks)} className="p-2 hover:bg-black/10 rounded-full relative" title="Voir marque-pages">
-            <Bookmark className="w-5 h-5" />
+          <div className="flex flex-col">
+            <span className="text-sm font-semibold truncate max-w-[160px] sm:max-w-[280px]"
+              style={{ color: darkMode ? '#fff' : '#1A1008' }}>
+              {book.titre}
+            </span>
+            <span className="text-[10px] hidden sm:inline"
+              style={{ color: darkMode ? 'rgba(255,255,255,0.4)' : 'rgba(26,16,8,0.4)' }}>
+              {book.auteur}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowSearch(v => !v)}
+            className="p-2 rounded-full transition-all duration-200 hover:scale-110"
+            style={{
+              background: showSearch ? 'rgba(212,175,55,0.25)' : 'rgba(0,0,0,0.25)',
+              color: showSearch ? '#D4AF37' : 'rgba(255,255,255,0.8)',
+            }}>
+            <Search className="w-4 h-4" />
+          </button>
+
+          <button onClick={handleAddBookmark}
+            className="p-2 rounded-full transition-all duration-200 hover:scale-110"
+            style={{
+              background: isBookmarked ? 'rgba(212,175,55,0.25)' : 'rgba(0,0,0,0.25)',
+              color: isBookmarked ? '#D4AF37' : 'rgba(255,255,255,0.8)',
+            }}>
+            <BookmarkPlus className="w-4 h-4" />
+          </button>
+
+          <button onClick={() => setShowBookmarks(v => !v)}
+            className="p-2 rounded-full transition-all duration-200 hover:scale-110 relative"
+            style={{
+              background: showBookmarks ? 'rgba(212,175,55,0.25)' : 'rgba(0,0,0,0.25)',
+              color: showBookmarks ? '#D4AF37' : 'rgba(255,255,255,0.8)',
+            }}>
+            <Bookmark className="w-4 h-4" />
             {bookmarks.length > 0 && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#D4AF37] text-black text-[10px] font-bold rounded-full flex items-center justify-center">{bookmarks.length}</span>
+              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold"
+                style={{ background: '#D4AF37', color: '#000' }}>
+                {bookmarks.length}
+              </span>
             )}
           </button>
-          <div className="h-6 w-px bg-current opacity-20 mx-1"></div>
-          <button onClick={() => setFontSize(f => Math.max(12, f - 1))} className="p-2 hover:bg-black/10 rounded-full" title="Réduire police"><ZoomOut className="w-5 h-5" /></button>
-          <button onClick={() => setFontSize(f => Math.min(24, f + 1))} className="p-2 hover:bg-black/10 rounded-full" title="Agrandir police"><ZoomIn className="w-5 h-5" /></button>
-          <span className="text-xs opacity-50 font-mono w-10 text-center">{fontSize}px</span>
-          <div className="h-6 w-px bg-current opacity-20 mx-1"></div>
-          <button onClick={() => setDarkMode(!darkMode)} className="p-2 hover:bg-black/10 rounded-full" title="Thème">
-            {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+
+          <div className="w-px h-5 mx-1" style={{ background: 'rgba(255,255,255,0.15)' }} />
+
+          <button onClick={() => setShowSettings(v => !v)}
+            className="p-2 rounded-full transition-all duration-200 hover:scale-110"
+            style={{
+              background: showSettings ? 'rgba(212,175,55,0.25)' : 'rgba(0,0,0,0.25)',
+              color: showSettings ? '#D4AF37' : 'rgba(255,255,255,0.8)',
+            }}>
+            <Settings className="w-4 h-4" />
           </button>
-          <button onClick={toggleFullscreen} className="p-2 hover:bg-black/10 rounded-full" title="Plein Écran"><Maximize className="w-5 h-5" /></button>
-          <button onClick={() => setShowNotes(!showNotes)} className="p-2 hover:bg-black/10 rounded-full" title="Notes">
-            <StickyNote className="w-5 h-5" />
+
+          <button onClick={() => updateSetting('soundEnabled', !settings.soundEnabled)}
+            className="p-2 rounded-full transition-all duration-200 hover:scale-110"
+            style={{ background: 'rgba(0,0,0,0.25)', color: settings.soundEnabled ? 'rgba(255,255,255,0.8)' : 'rgba(255,80,80,0.5)' }}>
+            {settings.soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+          </button>
+
+          <button onClick={() => updateSetting('darkMode', !darkMode)}
+            className="p-2 rounded-full transition-all duration-200 hover:scale-110"
+            style={{ background: 'rgba(0,0,0,0.25)', color: 'rgba(255,255,255,0.8)' }}>
+            {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
+
+          <button onClick={toggleFullscreen}
+            className="p-2 rounded-full transition-all duration-200 hover:scale-110"
+            style={{ background: 'rgba(0,0,0,0.25)', color: 'rgba(255,255,255,0.8)' }}>
+            {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
           </button>
         </div>
-      </div>
+      </header>
 
-      {/* Progress bar */}
-      <div className="w-full h-1 bg-[#2C261A]">
-        <div className="h-full bg-gradient-to-r from-[#D4AF37] to-amber-400 transition-all duration-500" style={{ width: `${progress}%` }}></div>
-      </div>
-
-      <div className="flex flex-1 overflow-hidden">
-        {/* Main reader */}
-        <div className="flex-1 flex flex-col justify-center items-center p-4 overflow-hidden perspective-[1500px]">
-          {viewPdf && bookPdfPath ? (
-            <div className="w-full h-full min-h-[80vh]">
-              <embed src={bookPdfPath} type="application/pdf" className="w-full h-full rounded-lg shadow-[0_30px_60px_rgba(0,0,0,0.4)]" />
-            </div>
-          ) : (
-          <div className="relative shadow-[0_30px_60px_rgba(0,0,0,0.4)] max-w-full">
-            <HTMLFlipBook
-              ref={flipRef}
-              width={350} height={500}
-              size="fixed" minWidth={315} maxWidth={1000}
-              minHeight={400} maxHeight={1533}
-              maxShadowOpacity={0.5} showCover={true}
-              mobileScrollSupport={true}
-              className="book-wrapper"
-              onFlip={handleFlip}
-              startPage={currentPage - 1}
-            >
-              <CoverPage key="cover" title={book.titre} author={book.auteur} coverImage={book.cover_image} darkMode={darkMode} />
-
-              {pages.map((text, idx) => (
-                <Page key={`p${idx}`} number={idx + 1} title={book.titre} fontSize={fontSize} darkMode={darkMode}>
-                  {text}
-                </Page>
-              ))}
-
-              <BackCover key="back" />
-            </HTMLFlipBook>
-          </div>
-          )}
-        </div>
-
-        {/* Side panels */}
-        {showBookmarks && (
-          <div className={`w-80 shrink-0 border-l ${darkMode ? 'bg-[#14120E] border-[#2C261A]' : 'bg-[#F0ECE1] border-gray-300'} p-6 overflow-y-auto`}>
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="font-bold uppercase tracking-wider flex items-center gap-2"><Bookmark className="w-4 h-4 text-[#D4AF37]" /> Marque-pages</h3>
-              <button onClick={() => setShowBookmarks(false)}><X className="w-5 h-5 opacity-50 hover:opacity-100" /></button>
-            </div>
-            {bookmarks.length === 0 && <p className="text-sm text-gray-500">Aucun marque-page.</p>}
-            <div className="space-y-3">
-              {bookmarks.map(bm => (
-                <div key={bm.id} className={`p-3 rounded-xl flex items-center justify-between ${darkMode ? 'bg-[#1C1812]' : 'bg-white'} border border-[#2C261A]/30`}>
-                  <button
-                    onClick={() => { flipRef.current?.pageFlip()?.flip(bm.page_number - 1); setShowBookmarks(false); }}
-                    className="text-sm font-bold text-[#D4AF37] hover:underline"
-                  >
-                    Page {bm.page_number}
-                    {bm.note && <p className="text-xs text-gray-500 font-normal mt-1">{bm.note}</p>}
-                  </button>
-                  <button onClick={() => handleDeleteBookmark(bm.id)} className="text-red-400 hover:text-red-300"><Trash2 className="w-4 h-4" /></button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {showNotes && (
-          <div className={`w-80 shrink-0 border-l ${darkMode ? 'bg-[#14120E] border-[#2C261A]' : 'bg-[#F0ECE1] border-gray-300'} p-6 overflow-y-auto`}>
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="font-bold uppercase tracking-wider flex items-center gap-2"><StickyNote className="w-4 h-4 text-[#D4AF37]" /> Notes</h3>
-              <button onClick={() => setShowNotes(false)}><X className="w-5 h-5 opacity-50 hover:opacity-100" /></button>
-            </div>
-
-            <div className={`mb-6 p-4 rounded-xl ${darkMode ? 'bg-[#1C1812]' : 'bg-white'} border border-[#2C261A]/30`}>
-              <p className="text-xs text-gray-500 mb-2">Ajouter une note (page {currentPage})</p>
-              <textarea
-                value={newNote}
-                onChange={e => setNewNote(e.target.value)}
-                className="w-full bg-transparent border border-[#2C261A] rounded-lg p-2 text-sm resize-none focus:outline-none focus:border-[#D4AF37]"
-                rows={3}
-                placeholder="Écrivez votre note..."
+      {/* Search panel */}
+      {showSearch && (
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-30 w-full max-w-md px-4"
+          onClick={(e) => e.stopPropagation()}>
+          <div className="rounded-xl overflow-hidden shadow-2xl"
+            style={{
+              background: darkMode ? 'rgba(20,17,13,0.95)' : 'rgba(248,243,234,0.95)',
+              backdropFilter: 'blur(20px)',
+              border: darkMode ? '1px solid rgba(212,175,55,0.15)' : '1px solid rgba(0,0,0,0.08)',
+            }}>
+            <div className="flex items-center gap-2 px-4 py-3">
+              <Search className="w-4 h-4 shrink-0" style={{ color: '#D4AF37', opacity: 0.6 }} />
+              <input
+                ref={searchRef}
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') performSearch(searchQuery); }}
+                placeholder="Rechercher dans le livre..."
+                className="flex-1 bg-transparent text-sm outline-none border-none placeholder:opacity-30"
+                style={{ color: darkMode ? 'rgba(255,255,255,0.85)' : '#1A1008' }}
               />
-              <button onClick={handleAddNote} className="mt-2 w-full bg-[#D4AF37] text-black py-2 rounded-lg font-bold text-sm hover:bg-white transition-colors">
-                Ajouter
+              {searchQuery && (
+                <button onClick={() => { setSearchQuery(''); setSearchResults([]); setSearchIdx(-1); }}
+                  className="p-1 rounded-full hover:bg-black/10 transition-colors">
+                  <X className="w-3.5 h-3.5" style={{ opacity: 0.4 }} />
+                </button>
+              )}
+            </div>
+            {searchResults.length > 0 && (
+              <div className="border-t px-2 py-2 max-h-48 overflow-y-auto"
+                style={{ borderColor: darkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }}>
+                <div className="flex items-center justify-between px-2 mb-2">
+                  <span className="text-[10px] font-mono" style={{ opacity: 0.5 }}>
+                    {searchIdx + 1} / {searchResults.length}
+                  </span>
+                  <div className="flex gap-1">
+                    <button onClick={() => navigateSearch('prev')} className="p-1 rounded hover:bg-black/10">
+                      <ChevronLeft className="w-3 h-3" />
+                    </button>
+                    <button onClick={() => navigateSearch('next')} className="p-1 rounded hover:bg-black/10">
+                      <ChevronRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+                {searchResults.slice(0, 15).map((r, i) => (
+                  <button key={i}
+                    onClick={() => { setSearchIdx(i); goToPage(r.page); setShowSearch(false); }}
+                    className="w-full text-left px-3 py-2 text-xs rounded-lg transition-colors flex justify-between items-center"
+                    style={{
+                      background: i === searchIdx ? 'rgba(212,175,55,0.12)' : 'transparent',
+                      color: darkMode ? 'rgba(255,255,255,0.7)' : '#2A2420',
+                    }}>
+                    <span className="truncate flex-1">{r.preview}</span>
+                    <span className="font-mono shrink-0 ml-2 opacity-40" style={{ fontSize: 10 }}>p.{r.page}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Settings panel */}
+      {showSettings && (
+        <div className="absolute top-14 right-5 z-30 w-64"
+          onClick={(e) => e.stopPropagation()}>
+          <div className="rounded-xl overflow-hidden shadow-2xl"
+            style={{
+              background: darkMode ? 'rgba(20,17,13,0.95)' : 'rgba(248,243,234,0.95)',
+              backdropFilter: 'blur(20px)',
+              border: darkMode ? '1px solid rgba(212,175,55,0.15)' : '1px solid rgba(0,0,0,0.08)',
+            }}>
+            <div className="px-4 py-3 border-b"
+              style={{ borderColor: darkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }}>
+              <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: '#D4AF37' }}>
+                Paramètres
+              </h3>
+            </div>
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="text-[10px] uppercase tracking-wider font-semibold mb-2 block"
+                  style={{ color: darkMode ? 'rgba(255,255,255,0.4)' : 'rgba(26,16,8,0.4)' }}>
+                  Taille du texte
+                </label>
+                <div className="flex items-center gap-3">
+                  <button onClick={() => updateSetting('fontSize', Math.max(12, settings.fontSize - 1))}
+                    className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold transition-all hover:scale-105"
+                    style={{ background: 'rgba(212,175,55,0.12)', color: '#D4AF37' }}>A-</button>
+                  <span className="text-sm font-mono w-8 text-center"
+                    style={{ color: darkMode ? 'rgba(255,255,255,0.7)' : '#2A2420' }}>
+                    {settings.fontSize}
+                  </span>
+                  <button onClick={() => updateSetting('fontSize', Math.min(28, settings.fontSize + 1))}
+                    className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold transition-all hover:scale-105"
+                    style={{ background: 'rgba(212,175,55,0.12)', color: '#D4AF37' }}>A+</button>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] uppercase tracking-wider font-semibold mb-2 block"
+                  style={{ color: darkMode ? 'rgba(255,255,255,0.4)' : 'rgba(26,16,8,0.4)' }}>
+                  Interligne
+                </label>
+                <div className="flex items-center gap-3">
+                  <button onClick={() => updateSetting('lineHeight', Math.max(1.4, settings.lineHeight - 0.2))}
+                    className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold transition-all hover:scale-105"
+                    style={{ background: 'rgba(212,175,55,0.12)', color: '#D4AF37' }}>−</button>
+                  <span className="text-sm font-mono w-8 text-center"
+                    style={{ color: darkMode ? 'rgba(255,255,255,0.7)' : '#2A2420' }}>
+                    {settings.lineHeight.toFixed(1)}
+                  </span>
+                  <button onClick={() => updateSetting('lineHeight', Math.min(2.4, settings.lineHeight + 0.2))}
+                    className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold transition-all hover:scale-105"
+                    style={{ background: 'rgba(212,175,55,0.12)', color: '#D4AF37' }}>+</button>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] uppercase tracking-wider font-semibold mb-2 block"
+                  style={{ color: darkMode ? 'rgba(255,255,255,0.4)' : 'rgba(26,16,8,0.4)' }}>
+                  Police
+                </label>
+                <div className="flex gap-2">
+                  {[
+                    { label: 'Sérif', value: 'Georgia, "Times New Roman", serif' },
+                    { label: 'Sans', value: 'Arial, Helvetica, sans-serif' },
+                  ].map(f => (
+                    <button key={f.value} onClick={() => updateSetting('fontFamily', f.value)}
+                      className="flex-1 py-2 text-xs rounded-lg transition-all"
+                      style={{
+                        background: settings.fontFamily === f.value ? 'rgba(212,175,55,0.2)' : 'rgba(128,128,128,0.08)',
+                        color: settings.fontFamily === f.value ? '#D4AF37' : (darkMode ? 'rgba(255,255,255,0.5)' : 'rgba(26,16,8,0.5)'),
+                        border: settings.fontFamily === f.value ? '1px solid rgba(212,175,55,0.3)' : '1px solid transparent',
+                        fontFamily: f.value,
+                      }}>
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bookmarks panel */}
+      {showBookmarks && (
+        <div className="absolute top-14 right-5 z-30 w-72"
+          onClick={(e) => e.stopPropagation()}>
+          <div className="rounded-xl overflow-hidden shadow-2xl"
+            style={{
+              background: darkMode ? 'rgba(20,17,13,0.95)' : 'rgba(248,243,234,0.95)',
+              backdropFilter: 'blur(20px)',
+              border: darkMode ? '1px solid rgba(212,175,55,0.15)' : '1px solid rgba(0,0,0,0.08)',
+            }}>
+            <div className="flex items-center justify-between px-4 py-3 border-b"
+              style={{ borderColor: darkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }}>
+              <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: '#D4AF37' }}>
+                <Bookmark className="w-3 h-3 inline mr-1.5" />Marque-pages
+              </h3>
+              <button onClick={() => setShowBookmarks(false)} className="p-1 rounded-full hover:bg-black/10">
+                <X className="w-3.5 h-3.5" style={{ opacity: 0.5 }} />
               </button>
             </div>
-
-            {notes.length === 0 && <p className="text-sm text-gray-500">Aucune note.</p>}
-            <div className="space-y-3">
-              {notes.map((n, i) => (
-                <div key={n.id || i} className={`p-3 rounded-xl ${darkMode ? 'bg-[#1C1812]' : 'bg-white'} border border-[#2C261A]/30`}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs text-[#D4AF37] font-bold">Page {n.page_number}</span>
-                    <button onClick={() => handleDeleteNote(n.id)} className="text-red-400 hover:text-red-300"><X className="w-3 h-3" /></button>
+            {bookmarks.length === 0 ? (
+              <p className="text-xs px-4 py-6 text-center" style={{ opacity: 0.35 }}>
+                Appuyez sur <kbd className="px-1.5 py-0.5 rounded text-[9px]"
+                  style={{ background: 'rgba(212,175,55,0.15)', color: '#D4AF37' }}>B</kbd> pour ajouter
+              </p>
+            ) : (
+              <div className="p-2 max-h-64 overflow-y-auto space-y-1">
+                {bookmarks.map(bm => (
+                  <div key={bm.id}
+                    className="flex items-center justify-between p-2.5 rounded-lg transition-colors cursor-pointer group"
+                    style={{ background: bm.page_number === currentPage ? 'rgba(212,175,55,0.1)' : 'transparent' }}
+                    onClick={() => { goToPage(bm.page_number); setShowBookmarks(false); }}>
+                    <div>
+                      <span className="text-xs font-bold" style={{ color: '#D4AF37' }}>Page {bm.page_number}</span>
+                      {bm.note && <p className="text-[10px] mt-0.5" style={{ opacity: 0.5 }}>{bm.note}</p>}
+                    </div>
+                    <button onClick={(e) => { e.stopPropagation(); handleDeleteBookmark(bm.id); }}
+                      className="p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/10">
+                      <X className="w-3 h-3" style={{ color: '#ef4444' }} />
+                    </button>
                   </div>
-                  <p className="text-sm">{n.text}</p>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* Bottom bar */}
+      <footer
+        className="absolute bottom-0 left-0 right-0 z-20 flex items-center justify-between px-5 py-3 transition-all duration-500"
+        style={{
+          background: darkMode
+            ? 'linear-gradient(0deg, rgba(13,11,9,0.92) 0%, transparent 100%)'
+            : 'linear-gradient(0deg, rgba(200,188,168,0.92) 0%, transparent 100%)',
+          opacity: showUI ? 1 : 0,
+          pointerEvents: showUI ? 'auto' : 'none',
+        }}
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-mono tabular-nums"
+            style={{ color: darkMode ? 'rgba(255,255,255,0.5)' : 'rgba(26,16,8,0.5)' }}>
+            <span style={{ color: '#D4AF37', fontWeight: 700 }}>{currentPage}</span>
+            <span style={{ opacity: 0.4 }}> / {totalPages}</span>
+          </span>
+        </div>
+
+        <div className="flex-1 mx-6 hidden sm:block">
+          <div className="w-full h-1 rounded-full overflow-hidden"
+            style={{ background: darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)' }}>
+            <div className="h-full rounded-full transition-all duration-500 ease-out"
+              style={{
+                width: `${progress}%`,
+                background: 'linear-gradient(90deg, #B8860B, #D4AF37, #E8C84A)',
+                boxShadow: '0 0 8px rgba(212,175,55,0.4)',
+              }} />
+          </div>
+        </div>
+
+        <div className="text-[10px] font-mono"
+          style={{ color: darkMode ? 'rgba(255,255,255,0.35)' : 'rgba(26,16,8,0.35)' }}>
+          {progress}%
+        </div>
+      </footer>
     </div>
   );
 }

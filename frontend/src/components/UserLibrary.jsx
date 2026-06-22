@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Sparkles, MessageSquare, Flame, Star, ChevronRight, BookOpen, Send, Play, Clock, Loader, X, Film, Calendar, Book, ExternalLink } from 'lucide-react';
-import { fetchBooks } from '../api/libraryClient';
+import { Search, Sparkles, MessageSquare, Flame, Star, ChevronRight, BookOpen, Send, Play, Clock, Loader, X, Film, Calendar, Book, ExternalLink, Heart } from 'lucide-react';
+import { fetchBooks, addFavori, removeFavori, getFavoris } from '../api/libraryClient';
 
 export default function UserLibrary() {
   const navigate = useNavigate();
@@ -12,6 +12,10 @@ export default function UserLibrary() {
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedBook, setSelectedBook] = useState(null);
+  const [favoriBookIds, setFavoriBookIds] = useState(new Set());
+  const [confirmFavori, setConfirmFavori] = useState(null);
+  const [favoriLoading, setFavoriLoading] = useState(false);
+  const [favoriError, setFavoriError] = useState('');
   const booksPerPage = 30;
   const [chatMessages, setChatMessages] = useState([
     { text: "Bonjour ! Quel livre allez-vous dévorer aujourd'hui ?", isBot: true }
@@ -22,6 +26,12 @@ export default function UserLibrary() {
         .then(setBooks)
         .catch(console.error)
         .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    getFavoris().then(data => {
+      setFavoriBookIds(new Set(data.map(f => f.reference_id)));
+    }).catch(() => {});
   }, []);
 
   useEffect(() => { setCurrentPage(1); }, [searchQuery, activeFilter]);
@@ -143,6 +153,12 @@ export default function UserLibrary() {
                             {book.video_url ? 'Bande-annonce' : 'Découvrir'}
                           </span>
                         </div>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setConfirmFavori(book); }}
+                          className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center hover:bg-black/70 transition-all z-10"
+                        >
+                          <Heart className={`w-4 h-4 ${favoriBookIds.has(book.id) ? 'fill-red-500 text-red-500' : 'text-white/70 hover:text-red-400'} transition-colors`} />
+                        </button>
                       </div>
                       <div className="p-3">
                         <h3 className="text-sm font-bold text-white truncate group-hover:text-[#D4AF37] transition-colors">{book.titre}</h3>
@@ -388,6 +404,69 @@ export default function UserLibrary() {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Favori */}
+      {confirmFavori && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setConfirmFavori(null)}>
+          <div className="bg-[#1A1713] border border-[#D4AF37]/30 rounded-2xl p-8 max-w-sm w-full shadow-[0_0_50px_rgba(212,175,55,0.15)]" onClick={e => e.stopPropagation()}>
+            <div className="text-center mb-6">
+              <div className={`w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-4 ${favoriBookIds.has(confirmFavori.id) ? 'bg-red-500/10' : 'bg-[#D4AF37]/10'}`}>
+                <Heart className={`w-8 h-8 ${favoriBookIds.has(confirmFavori.id) ? 'text-red-400' : 'text-[#D4AF37]'}`} />
+              </div>
+              <h3 className="text-white font-bold text-lg mb-1">
+                {favoriBookIds.has(confirmFavori.id) ? 'Retirer des favoris ?' : 'Ajouter aux favoris ?'}
+              </h3>
+              <p className="text-gray-400 text-sm">
+                <span className="font-bold text-white">{confirmFavori.titre}</span>
+                <br />
+                {confirmFavori.auteur}
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmFavori(null)}
+                className="flex-1 px-5 py-3 rounded-xl border border-[#2C261A] text-gray-400 font-bold hover:bg-[#2C261A] transition-all text-sm"
+              >
+                Annuler
+              </button>
+              {favoriError && (
+                <p className="text-red-400 text-xs text-center mb-2">{favoriError}</p>
+              )}
+              <button
+                onClick={async () => {
+                  if (favoriLoading) return;
+                  setFavoriLoading(true);
+                  setFavoriError('');
+                  try {
+                    if (favoriBookIds.has(confirmFavori.id)) {
+                      await removeFavori(confirmFavori.id);
+                      setFavoriBookIds(prev => { const s = new Set(prev); s.delete(confirmFavori.id); return s; });
+                    } else {
+                      await addFavori(confirmFavori.id);
+                      setFavoriBookIds(prev => new Set(prev).add(confirmFavori.id));
+                    }
+                    setConfirmFavori(null);
+                  } catch (e) {
+                    setFavoriError(e?.response?.data?.message || 'Erreur lors de la mise à jour des favoris.');
+                  } finally {
+                    setFavoriLoading(false);
+                  }
+                }}
+                className={`flex-1 px-5 py-3 rounded-xl font-bold transition-all text-sm ${
+                  favoriBookIds.has(confirmFavori.id)
+                    ? 'bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30'
+                    : 'bg-[#D4AF37] text-black hover:bg-white shadow-[0_0_15px_rgba(212,175,55,0.2)]'
+                }`}
+              >
+                {favoriLoading
+                  ? 'Chargement...'
+                  : favoriBookIds.has(confirmFavori.id) ? 'Retirer' : 'Ajouter'
+                }
+              </button>
             </div>
           </div>
         </div>

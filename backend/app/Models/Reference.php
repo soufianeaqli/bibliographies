@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use App\Models\Favori;
 
 /**
  * Entité Reference (classe « abstraite » du diagramme de classes).
@@ -89,6 +90,18 @@ class Reference extends Model
     public function exports(): HasMany
     {
         return $this->hasMany(Export::class, 'reference_id');
+    }
+
+    /** Favoris (1 → 0..*). */
+    public function favoris(): HasMany
+    {
+        return $this->hasMany(Favori::class, 'reference_id');
+    }
+
+    /** Utilisateurs qui ont mis en favori (N:N via favori). */
+    public function favorisePar(): BelongsToMany
+    {
+        return $this->belongsToMany(Utilisateur::class, 'favori', 'reference_id', 'utilisateur_id');
     }
 
     /* --- Sous-types (héritage TPS : même id que la référence) --- */
