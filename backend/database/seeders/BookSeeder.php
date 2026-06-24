@@ -11,6 +11,12 @@ class BookSeeder extends Seeder
     {
         $this->command?->info('Importation des livres de secours...');
 
+        $userId = \App\Models\Utilisateur::value('id');
+        if (!$userId) {
+            $this->command?->error('Aucun utilisateur trouvé. Exécutez d\'abord AdminSeeder.');
+            return;
+        }
+
         $books = $this->getBooks();
         $imported = 0;
 
@@ -28,7 +34,7 @@ class BookSeeder extends Seeder
                 'auteur' => $book['auteur'],
                 'description' => $book['desc'],
                 'type' => 'livre',
-                'utilisateur_id' => 1,
+                'utilisateur_id' => $userId,
                 'cover_image' => $book['cover'],
                 'total_pages' => $book['pages'],
                 'annee' => $book['annee'],

@@ -12,6 +12,13 @@ class SeedBooks extends Command
 
     public function handle()
     {
+        $userId = \App\Models\Utilisateur::value('id');
+        if (!$userId) {
+            $this->error('Aucun utilisateur trouvé. Créez d\'abord un compte admin.');
+            $this->info('Exécutez : php artisan db:seed --class=AdminSeeder');
+            return 1;
+        }
+
         $count = Reference::where('type', 'livre')->count();
         if ($count > 0) {
             $this->warn("Il y a déjà {$count} livres dans la base. Utilisez --force pour importer quand même.");
@@ -37,7 +44,7 @@ class SeedBooks extends Command
                 'auteur' => $book['auteur'],
                 'description' => $book['desc'],
                 'type' => 'livre',
-                'utilisateur_id' => 1,
+                'utilisateur_id' => $userId,
                 'cover_image' => $book['cover'],
                 'total_pages' => $book['pages'],
                 'annee' => $book['annee'],
