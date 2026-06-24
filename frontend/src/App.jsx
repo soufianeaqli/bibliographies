@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
+import AuthCallbackPage from './pages/AuthCallbackPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import PublicOnlyRoute from './components/PublicOnlyRoute';
 import LibraryLayout from './components/LibraryLayout';
@@ -30,6 +31,7 @@ export default function App() {
           </PublicOnlyRoute>
         }
       />
+      <Route path="/auth/callback" element={<AuthCallbackPage />} />
       
       <Route path="/bibliotheque" element={<ProtectedRoute><LibraryLayout /></ProtectedRoute>}>
         <Route index element={<Accueil />} />

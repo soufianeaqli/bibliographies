@@ -36,11 +36,16 @@ class Utilisateur extends Authenticatable
         'mot_de_passe',
         'role',
         'statut',
+        'provider',
+        'provider_id',
+        'provider_token',
+        'avatar',
         'date_creation',
     ];
 
     protected $hidden = [
         'mot_de_passe',
+        'provider_token',
     ];
 
     protected function casts(): array
