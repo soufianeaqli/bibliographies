@@ -52,21 +52,25 @@ export default function LibraryLayout() {
     try { await logout(); } catch {}
   };
   const estAdmin = utilisateur?.role === 'administrateur';
-  const navItems = [
-    { icon: Home, label: 'Accueil', path: '/bibliotheque' },
-    { icon: BookOpen, label: 'Bibliothèque', path: '/bibliotheque/livres' },
-    ...(estAdmin
-      ? [{ icon: ShieldCheck, label: 'Réservations', path: '/bibliotheque/reservations' }]
-      : [{ icon: Book, label: 'Mes Livres', path: '/bibliotheque/mes-livres' }]
-    ),
-    { icon: LayoutGrid, label: 'Catégories', path: '/bibliotheque/categories' },
-    { icon: Star, label: 'Favoris', path: '/bibliotheque/favoris' },
-    { icon: Clock, label: 'Historiques', path: '/bibliotheque/historique' },
-    { icon: FileText, label: 'Notes', path: '/bibliotheque/notes' },
-    { icon: Tag, label: 'Recommandations', path: '/bibliotheque/recommandations' },
-    { icon: User, label: 'Profil', path: '/bibliotheque/profil' },
-    { icon: Settings, label: 'Paramètres', path: '/bibliotheque/parametres' },
-  ];
+  const navItems = estAdmin
+    ? [
+        { icon: Home, label: 'Dashboard', path: '/bibliotheque' },
+        { icon: BookOpen, label: 'Livres', path: '/bibliotheque/livres' },
+        { icon: ShieldCheck, label: 'Réservations', path: '/bibliotheque/reservations' },
+        { icon: User, label: 'Profil', path: '/bibliotheque/profil' },
+      ]
+    : [
+        { icon: Home, label: 'Accueil', path: '/bibliotheque' },
+        { icon: BookOpen, label: 'Bibliothèque', path: '/bibliotheque/livres' },
+        { icon: Book, label: 'Mes Livres', path: '/bibliotheque/mes-livres' },
+        { icon: LayoutGrid, label: 'Catégories', path: '/bibliotheque/categories' },
+        { icon: Star, label: 'Favoris', path: '/bibliotheque/favoris' },
+        { icon: Clock, label: 'Historiques', path: '/bibliotheque/historique' },
+        { icon: FileText, label: 'Notes', path: '/bibliotheque/notes' },
+        { icon: Tag, label: 'Recommandations', path: '/bibliotheque/recommandations' },
+        { icon: User, label: 'Profil', path: '/bibliotheque/profil' },
+        { icon: Settings, label: 'Paramètres', path: '/bibliotheque/parametres' },
+      ];
 
   return (
     <div className="flex h-screen bg-[#0E0C0A] text-white font-sans overflow-hidden">

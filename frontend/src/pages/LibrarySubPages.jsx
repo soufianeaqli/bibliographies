@@ -3,6 +3,7 @@ import { Home, LayoutGrid, Star, Clock, FileText, Tag, User, Settings, Play, Boo
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { fetchBooks, getFavoris, removeFavori, reserveBook, getMyBookmarks, deleteBookmark, getCategories, getHistory } from '../api/libraryClient';
+import AdminDashboard from '../components/AdminDashboard';
 
 const PageHeader = ({ icon: Icon, title, desc }) => (
   <div className="px-8 pt-10 pb-6 relative z-10">
@@ -48,6 +49,7 @@ const getTimeAgo = (dateStr) => {
 
 export const Accueil = () => {
   const { utilisateur } = useAuth();
+
   const [books, setBooks] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -65,6 +67,8 @@ export const Accueil = () => {
   const uniqueAuthors = [...new Set(books.map(b => b.auteur))].length;
   const recentBooks = books.slice(0, 6);
   const greeting = (h) => h < 12 ? 'Bonjour' : h < 18 ? 'Bon après-midi' : 'Bonsoir';
+
+  if (utilisateur?.role === 'administrateur') return <AdminDashboard />;
 
   return (
   <PageContainer>
