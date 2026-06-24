@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Home, LayoutGrid, Star, Clock, FileText, Tag, User, Settings, Play, BookOpen, Trash2, Search, ArrowRight, ShieldCheck, ChevronRight, Sparkles, Heart, Loader } from 'lucide-react';
+import { Home, LayoutGrid, Star, Clock, FileText, Tag, User, Play, BookOpen, Book, Trash2, Search, ArrowRight, ShieldCheck, ChevronRight, Sparkles, Heart, Loader } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { fetchBooks, getFavoris, removeFavori, reserveBook, getMyBookmarks, deleteBookmark, getCategories, getHistory } from '../api/libraryClient';
+import { fetchBooks, getFavoris, removeFavori, reserveBook, getMyBookmarks, deleteBookmark, getCategories, getHistory, getMyReservations, getUnreadNotificationCount } from '../api/libraryClient';
 import AdminDashboard from '../components/AdminDashboard';
 
 const PageHeader = ({ icon: Icon, title, desc }) => (
@@ -608,35 +608,112 @@ export const Notes = () => {
   );
 };
 
-export const Recommandations = () => (
-  <PageContainer>
-    <PageHeader icon={Tag} title="IA Recommandations" desc="Une sélection sur-mesure calculée par nos algorithmes." />
-    <div className="px-8 mt-4 pb-12">
-      <div className="bg-[#14120E]/90 backdrop-blur-md border border-[#D4AF37]/20 rounded-3xl p-10 text-center shadow-[0_0_50px_rgba(212,175,55,0.05)] mb-8">
-         <SparklesIcon className="w-16 h-16 text-purple-400 mx-auto mb-6 animate-pulse" />
-         <h3 className="text-2xl font-bold text-white mb-2">Analyse de vos préférences en cours...</h3>
-         <p className="text-gray-400 max-w-xl mx-auto">L'intelligence artificielle analyse vos 45 dernières lectures pour vous proposer des ouvrages qui correspondent exactement à vos goûts.</p>
-      </div>
+export const Recommandations = () => {
+  const navigate = useNavigate();
+  const [books, setBooks] = useState([]);
+  const [userGenres, setUserGenres] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-        {/* Mock Recommended Books */}
-        <div className="bg-gradient-to-b from-[#1C1812] to-[#0E0C0A] border border-[#2C261A] rounded-2xl p-6 shadow-xl relative overflow-hidden group">
-           <div className="absolute top-4 right-4 bg-purple-500/20 text-purple-300 text-xs font-bold px-2 py-1 rounded border border-purple-500/30">98% Match</div>
-           <div className="w-32 h-48 mx-auto rounded-lg shadow-2xl overflow-hidden border border-[#2C261A] mb-6 transform group-hover:-translate-y-2 group-hover:scale-105 transition-all duration-500">
-             <img src="https://images.unsplash.com/photo-1589829085413-56de8ae18c73?q=80&w=300" className="w-full h-full object-cover" alt="La Peste" />
-           </div>
-           <h4 className="text-center text-white font-bold text-lg">La Peste</h4>
-           <p className="text-center text-[#D4AF37] text-sm mb-6">Albert Camus</p>
-           <button className="w-full py-2 bg-transparent border border-[#D4AF37] text-[#D4AF37] rounded-lg font-bold hover:bg-[#D4AF37] hover:text-black transition-colors">Découvrir l'Aperçu</button>
+  useEffect(() => {
+    Promise.all([
+      fetchBooks(),
+      getFavoris().catch(() => []),
+      getHistory().catch(() => []),
+    ]).then(([allBooks, favoris, history]) => {
+      setBooks(allBooks);
+
+      const favGenres = favoris.map(f => f.reference?.genre).filter(Boolean);
+      const histGenres = history.map(h => h.reference?.genre).filter(Boolean);
+      const allUserGenres = [...favGenres, ...histGenres];
+      const genreCounts = {};
+      allUserGenres.forEach(g => { genreCounts[g] = (genreCounts[g] || 0) + 1; });
+      const sorted = Object.entries(genreCounts).sort((a, b) => b[1] - a[1]).map(e => e[0]);
+      setUserGenres(sorted.slice(0, 3));
+    }).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <PageContainer>
+        <PageHeader icon={Tag} title="Recommandations" desc="Livres sélectionnés pour vous." />
+        <div className="px-8 mt-4 pb-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="h-72 bg-[#1C1812] rounded-2xl animate-pulse border border-[#2C261A]" />
+          ))}
+        </div>
+      </PageContainer>
+    );
+  }
+
+  const topRated = [...books].sort((a, b) => (b.rating || 0) - (a.rating || 0)).slice(0, 6);
+  const genreBooks = userGenres.length > 0
+    ? [...books].filter(b => userGenres.includes(b.genre)).sort((a, b) => (b.rating || 0) - (a.rating || 0)).slice(0, 6)
+    : [];
+
+  return (
+    <PageContainer>
+      <PageHeader icon={Tag} title="Recommandations" desc="Livres sélectionnés pour vous." />
+
+      {genreBooks.length > 0 && (
+      <div className="px-8 mt-4 pb-8">
+        <h2 className="text-xl font-bold text-white flex items-center gap-2 mb-6">
+          <Sparkles className="w-5 h-5 text-purple-400" /> Dans vos genres favoris
+        </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {genreBooks.map((book) => (
+            <BookCard key={book.id} book={book} navigate={navigate} badge="Recommandé" badgeColor="purple" />
+          ))}
         </div>
       </div>
-    </div>
-  </PageContainer>
-);
+      )}
 
-const SparklesIcon = (props) => (
-  <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>
-);
+      <div className="px-8 mt-2 pb-12">
+        <h2 className="text-xl font-bold text-white flex items-center gap-2 mb-6">
+          <Star className="w-5 h-5 text-yellow-400" /> Les mieux notés
+        </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {topRated.map((book) => (
+            <BookCard key={book.id} book={book} navigate={navigate} badge={`${book.rating || '?'}/5`} badgeColor="yellow" />
+          ))}
+        </div>
+      </div>
+    </PageContainer>
+  );
+};
+
+const BookCard = ({ book, navigate, badge, badgeColor }) => {
+  const badgeColors = {
+    purple: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
+    yellow: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
+    emerald: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+    blue: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+  };
+
+  return (
+    <div
+      onClick={() => navigate(`/book/${book.id}`)}
+      className="bg-gradient-to-b from-[#1C1812] to-[#0E0C0A] border border-[#2C261A] rounded-2xl p-6 shadow-xl relative overflow-hidden group cursor-pointer hover:border-[#D4AF37]/50 hover:shadow-[0_0_30px_rgba(212,175,55,0.15)] transition-all duration-300"
+    >
+      <div className={`absolute top-4 right-4 text-xs font-bold px-2 py-1 rounded border ${badgeColors[badgeColor] || badgeColors.purple}`}>
+        {badge}
+      </div>
+      <div className="w-32 h-48 mx-auto rounded-lg shadow-2xl overflow-hidden border border-[#2C261A] mb-6 transform group-hover:-translate-y-2 group-hover:scale-105 transition-all duration-500">
+        {book.cover_image
+          ? <img src={book.cover_image} className="w-full h-full object-cover" alt={book.titre} />
+          : <div className="w-full h-full bg-[#1C1812] flex items-center justify-center text-gray-500 text-xs font-bold p-4 text-center">{book.titre}</div>
+        }
+      </div>
+      <h4 className="text-center text-white font-bold text-lg truncate">{book.titre}</h4>
+      <p className="text-center text-[#D4AF37] text-sm mb-3 truncate">{book.auteur}</p>
+      {book.genre && (
+        <p className="text-center text-[10px] uppercase tracking-wider text-gray-500 font-bold mb-4">{book.genre}</p>
+      )}
+      <button className="w-full py-2.5 bg-transparent border border-[#D4AF37] text-[#D4AF37] rounded-lg font-bold hover:bg-[#D4AF37] hover:text-black transition-colors text-sm">
+        Découvrir
+      </button>
+    </div>
+  );
+};
 
 export const Profil = () => {
   const { utilisateur, updateProfile } = useAuth();
@@ -645,13 +722,44 @@ export const Profil = () => {
   const [motDePasse, setMotDePasse] = useState('');
   const [message, setMessage] = useState('');
   const [msgType, setMsgType] = useState('success');
+  const [stats, setStats] = useState({ livresLus: 0, livresCompletes: 0, pagesLues: 0, favoris: 0, signets: 0, reservations: 0, nonLues: 0 });
+  const [loadingStats, setLoadingStats] = useState(true);
 
   useEffect(() => {
     if (utilisateur) {
       setNom(utilisateur.nom || '');
       setEmail(utilisateur.email || '');
+      chargerStats();
     }
   }, [utilisateur]);
+
+  const chargerStats = async () => {
+    setLoadingStats(true);
+    try {
+      const [history, favoris, bookmarks, reservations, notifCount] = await Promise.all([
+        getHistory(),
+        getFavoris(),
+        getMyBookmarks(),
+        getMyReservations(),
+        getUnreadNotificationCount(),
+      ]);
+      const livresLus = history?.length || 0;
+      const livresCompletes = history?.filter(h => (h.progress_percentage || 0) >= 100).length || 0;
+      const pagesLues = history?.reduce((acc, h) => acc + (h.last_page_read || 0), 0) || 0;
+      setStats({
+        livresLus,
+        livresCompletes,
+        pagesLues,
+        favoris: favoris?.length || 0,
+        signets: bookmarks?.length || 0,
+        reservations: reservations?.length || 0,
+        nonLues: notifCount?.count || 0,
+      });
+    } catch {
+    } finally {
+      setLoadingStats(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -671,9 +779,18 @@ export const Profil = () => {
     }
   };
 
+  const statCards = [
+    { label: 'Livres lus', value: stats.livresLus, icon: BookOpen, color: 'text-[#D4AF37]' },
+    { label: 'Terminés', value: stats.livresCompletes, icon: ShieldCheck, color: 'text-green-400' },
+    { label: 'Pages lues', value: stats.pagesLues, icon: FileText, color: 'text-blue-400' },
+    { label: 'Favoris', value: stats.favoris, icon: Star, color: 'text-yellow-400' },
+    { label: 'Signets', value: stats.signets, icon: Book, color: 'text-purple-400' },
+    { label: 'Réservations', value: stats.reservations, icon: Clock, color: 'text-amber-400' },
+  ];
+
   return (
   <PageContainer>
-    <PageHeader icon={User} title="Profil Personnel" desc="Identité, badges virtuels et sécurité." />
+    <PageHeader icon={User} title="Profil Personnel" desc="Identité, statistiques et sécurité." />
     <div className="px-8 mt-4 pb-12 grid grid-cols-1 lg:grid-cols-3 gap-8">
        <div className="lg:col-span-1 space-y-6">
          <div className="bg-[#14120E] border border-[#2C261A] rounded-3xl p-8 text-center shadow-2xl relative overflow-hidden">
@@ -684,106 +801,85 @@ export const Profil = () => {
               </div>
             </div>
             <h3 className="text-2xl font-black text-white relative z-10">{utilisateur?.nom || 'Utilisateur'}</h3>
-            <p className="text-[#D4AF37] font-bold uppercase tracking-widest text-xs mt-1 mb-6 relative z-10">{(utilisateur?.role || 'membre').charAt(0).toUpperCase() + (utilisateur?.role || 'membre').slice(1)}</p>
+            <p className="text-[#D4AF37] font-bold uppercase tracking-widest text-xs mt-1 mb-4 relative z-10">{utilisateur?.email}</p>
             <div className="flex justify-center gap-2 relative z-10">
-               <span className="bg-[#1C1812] border border-[#2C261A] text-white px-3 py-1 rounded-full text-xs font-bold">Niveau 12</span>
-               <span className="bg-[#1C1812] border border-[#2C261A] text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1"><ShieldCheck className="w-3 h-3 text-green-400"/> Vérifié</span>
+               {utilisateur?.date_creation && (
+                 <span className="bg-[#1C1812] border border-[#2C261A] text-gray-400 px-3 py-1 rounded-full text-[11px] font-medium">
+                   Membre depuis {new Date(utilisateur.date_creation).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}
+                 </span>
+               )}
             </div>
          </div>
+
+         {/* Stats */}
+         <div className="bg-[#14120E] border border-[#2C261A] rounded-3xl p-6 shadow-2xl">
+           <h3 className="text-sm uppercase tracking-widest text-gray-500 font-bold mb-4">Statistiques</h3>
+           {loadingStats ? (
+             <div className="space-y-3">
+               {Array.from({ length: 6 }).map((_, i) => (
+                 <div key={i} className="h-10 bg-[#1C1812] rounded-xl animate-pulse" />
+               ))}
+             </div>
+           ) : (
+             <div className="space-y-2">
+               {statCards.map((s, i) => (
+                 <div key={i} className="flex items-center justify-between bg-[#1C1812] rounded-xl px-4 py-3 border border-[#2C261A]">
+                   <div className="flex items-center gap-3">
+                     <s.icon className={`w-4 h-4 ${s.color}`} />
+                     <span className="text-sm text-gray-400">{s.label}</span>
+                   </div>
+                   <span className="text-white font-bold text-lg">{s.value}</span>
+                 </div>
+               ))}
+             </div>
+           )}
+         </div>
        </div>
-       
-       <div className="lg:col-span-2 bg-[#14120E] border border-[#2C261A] rounded-3xl p-8 shadow-2xl">
-          <h3 className="text-xl font-bold text-white mb-6 border-b border-[#2C261A] pb-4">Informations de Connexion</h3>
-          <form onSubmit={handleSubmit} className="space-y-6 max-w-xl">
-             {message && (
-               <div className={`px-4 py-3 rounded-xl text-sm font-bold border ${
-                 msgType === 'success'
-                   ? 'bg-[#D4AF37]/10 border-[#D4AF37]/50 text-[#D4AF37]'
-                   : 'bg-red-900/20 border-red-500/30 text-red-400'
-               }`}>
-                 {message}
+
+       <div className="lg:col-span-2 space-y-6">
+         <div className="bg-[#14120E] border border-[#2C261A] rounded-3xl p-8 shadow-2xl">
+            <h3 className="text-xl font-bold text-white mb-6 border-b border-[#2C261A] pb-4">Informations de Connexion</h3>
+            <form onSubmit={handleSubmit} className="space-y-6 max-w-xl">
+               {message && (
+                 <div className={`px-4 py-3 rounded-xl text-sm font-bold border ${
+                   msgType === 'success'
+                     ? 'bg-[#D4AF37]/10 border-[#D4AF37]/50 text-[#D4AF37]'
+                     : 'bg-red-900/20 border-red-500/30 text-red-400'
+                 }`}>
+                   {message}
+                 </div>
+               )}
+               <div>
+                  <label className="text-xs text-gray-500 uppercase font-bold tracking-widest mb-2 block">Nom Complet</label>
+                  <input
+                    value={nom}
+                    onChange={(e) => setNom(e.target.value)}
+                    className="w-full bg-[#1C1812] border border-[#2C261A] rounded-xl p-4 text-white focus:outline-none focus:border-[#D4AF37] transition-colors shadow-inner"
+                  />
                </div>
-             )}
-             <div>
-                <label className="text-xs text-gray-500 uppercase font-bold tracking-widest mb-2 block">Nom Complet</label>
-                <input
-                  value={nom}
-                  onChange={(e) => setNom(e.target.value)}
-                  className="w-full bg-[#1C1812] border border-[#2C261A] rounded-xl p-4 text-white focus:outline-none focus:border-[#D4AF37] transition-colors shadow-inner"
-                />
-             </div>
-             <div>
-                <label className="text-xs text-gray-500 uppercase font-bold tracking-widest mb-2 block">Adresse Email</label>
-                <input
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-[#1C1812] border border-[#2C261A] rounded-xl p-4 text-white focus:outline-none focus:border-[#D4AF37] transition-colors shadow-inner"
-                />
-             </div>
-             <div>
-                <label className="text-xs text-gray-500 uppercase font-bold tracking-widest mb-2 block">Nouveau mot de passe (optionnel)</label>
-                <input
-                  type="password"
-                  value={motDePasse}
-                  onChange={(e) => setMotDePasse(e.target.value)}
-                  placeholder="Laisser vide pour conserver l'actuel"
-                  className="w-full bg-[#1C1812] border border-[#2C261A] rounded-xl p-4 text-white focus:outline-none focus:border-[#D4AF37] transition-colors shadow-inner"
-                />
-             </div>
-             <button type="submit" className="bg-[#D4AF37] text-black font-black uppercase tracking-wider text-sm px-8 py-4 rounded-xl hover:bg-white hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">Mettre à jour le profil</button>
-          </form>
+               <div>
+                  <label className="text-xs text-gray-500 uppercase font-bold tracking-widest mb-2 block">Adresse Email</label>
+                  <input
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full bg-[#1C1812] border border-[#2C261A] rounded-xl p-4 text-white focus:outline-none focus:border-[#D4AF37] transition-colors shadow-inner"
+                  />
+               </div>
+               <div>
+                  <label className="text-xs text-gray-500 uppercase font-bold tracking-widest mb-2 block">Nouveau mot de passe (optionnel)</label>
+                  <input
+                    type="password"
+                    value={motDePasse}
+                    onChange={(e) => setMotDePasse(e.target.value)}
+                    placeholder="Laisser vide pour conserver l'actuel"
+                    className="w-full bg-[#1C1812] border border-[#2C261A] rounded-xl p-4 text-white focus:outline-none focus:border-[#D4AF37] transition-colors shadow-inner"
+                  />
+               </div>
+               <button type="submit" className="bg-[#D4AF37] text-black font-black uppercase tracking-wider text-sm px-8 py-4 rounded-xl hover:bg-white hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">Mettre à jour le profil</button>
+            </form>
+         </div>
        </div>
     </div>
   </PageContainer>
-);
+  );
 };
-
-export const Parametres = () => (
-  <PageContainer>
-    <PageHeader icon={Settings} title="Paramètres" desc="Personnalisez votre interface et vos préférences de lecture." />
-    <div className="px-8 mt-4 pb-12 max-w-4xl grid gap-6">
-       
-       <div className="bg-[#14120E] border border-[#2C261A] rounded-3xl p-8 shadow-2xl">
-          <h3 className="text-xl font-bold text-[#D4AF37] mb-6">Affichage & Lecture 3D</h3>
-          <div className="space-y-6">
-            <label className="flex items-center justify-between group cursor-pointer">
-               <div>
-                 <div className="text-white font-bold group-hover:text-[#D4AF37] transition-colors">Mode Nuit (Immersif) Universel</div>
-                 <div className="text-sm text-gray-500 mt-1">Force l\'interface utilisateur en couleurs sombres.</div>
-               </div>
-               <input type="checkbox" defaultChecked className="w-6 h-6 accent-[#D4AF37] cursor-pointer" />
-            </label>
-            <hr className="border-[#2C261A]" />
-            <label className="flex items-center justify-between group cursor-pointer">
-               <div>
-                 <div className="text-white font-bold group-hover:text-[#D4AF37] transition-colors">Animations 3D de pages</div>
-                 <div className="text-sm text-gray-500 mt-1">Active le moteur de rendu 3D lors du changement de page.</div>
-               </div>
-               <input type="checkbox" defaultChecked className="w-6 h-6 accent-[#D4AF37] cursor-pointer" />
-            </label>
-          </div>
-       </div>
-
-       <div className="bg-[#14120E] border border-[#2C261A] rounded-3xl p-8 shadow-2xl">
-          <h3 className="text-xl font-bold text-[#D4AF37] mb-6">Notifications & IA</h3>
-          <div className="space-y-6">
-            <label className="flex items-center justify-between group cursor-pointer">
-               <div>
-                 <div className="text-white font-bold group-hover:text-[#D4AF37] transition-colors">Alertes de Réservation Disponibles</div>
-               </div>
-               <input type="checkbox" defaultChecked className="w-6 h-6 accent-[#D4AF37] cursor-pointer" />
-            </label>
-            <hr className="border-[#2C261A]" />
-            <label className="flex items-center justify-between group cursor-pointer">
-               <div>
-                 <div className="text-white font-bold group-hover:text-[#D4AF37] transition-colors">Suggestions IA Avancées</div>
-                 <div className="text-sm text-gray-500 mt-1">Permet à l\'IA d'analyser vos notes pour de meilleures recommandations.</div>
-               </div>
-               <input type="checkbox" defaultChecked className="w-6 h-6 accent-[#D4AF37] cursor-pointer" />
-            </label>
-          </div>
-       </div>
-
-    </div>
-  </PageContainer>
-);

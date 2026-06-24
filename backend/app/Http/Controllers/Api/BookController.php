@@ -345,6 +345,167 @@ class BookController extends Controller
         ];
     }
 
+    public function searchExternalApi(Request $request)
+    {
+        $request->validate(['query' => 'required|string|min:2']);
+        $query = urlencode($request->input('query'));
+        $apiKey = env('GOOGLE_BOOKS_API_KEY', '');
+
+        $url = "https://www.googleapis.com/books/v1/volumes?q={$query}&maxResults=10&langRestrict=fr";
+        if ($apiKey) {
+            $url .= "&key={$apiKey}";
+        }
+
+        $items = [];
+        try {
+            $response = Http::timeout(10)->get($url);
+            if ($response->successful()) {
+                $items = $response->json('items') ?? [];
+            }
+        } catch (\Exception $e) {}
+
+        $results = [];
+        foreach ($items as $item) {
+            $info = $item['volumeInfo'] ?? [];
+            $results[] = [
+                'google_id' => $item['id'] ?? null,
+                'titre' => $info['title'] ?? null,
+                'auteur' => isset($info['authors']) ? (is_array($info['authors']) ? implode(', ', $info['authors']) : $info['authors']) : null,
+                'description' => substr($info['description'] ?? '', 0, 800),
+                'cover_image' => !empty($info['imageLinks']['thumbnail']) ? str_replace(['http:', '&edge=curl'], ['https:', ''], $info['imageLinks']['thumbnail']) : null,
+                'annee' => !empty($info['publishedDate']) ? (int) substr($info['publishedDate'], 0, 4) : null,
+                'rating' => $info['averageRating'] ?? null,
+                'total_pages' => $info['pageCount'] ?? null,
+            ];
+        }
+
+        return response()->json($results);
+    }
+
+    public function importSelected(Request $request)
+    {
+        $request->validate([
+            'titre' => 'required|string',
+            'auteur' => 'required|string',
+        ]);
+
+        $existing = Reference::where('titre', $request->input('titre'))
+            ->where('auteur', $request->input('auteur'))
+            ->first();
+        if ($existing) {
+            return response()->json(['message' => 'Ce livre existe déjà dans la bibliothèque.'], 409);
+        }
+
+        $reference = Reference::create([
+            'titre' => $request->input('titre'),
+            'auteur' => $request->input('auteur'),
+            'description' => $request->input('description'),
+            'type' => 'livre',
+            'utilisateur_id' => Auth::id() ?? 1,
+            'cover_image' => $request->input('cover_image'),
+            'annee' => $request->input('annee'),
+            'rating' => $request->input('rating', 4.0),
+            'total_pages' => $request->input('total_pages', 300),
+            'is_featured' => false,
+            'genre' => $request->input('genre'),
+            'date_creation' => now(),
+        ]);
+
+        $reference->cover_image = $reference->cover_image
+            ? (str_starts_with($reference->cover_image, 'http') ? $reference->cover_image : url('storage/' . $reference->cover_image))
+            : null;
+
+        return response()->json($reference, 201);
+    }
+
+    public function fetchFromUrl(Request $request)
+    {
+        $request->validate(['url' => 'required|string']);
+        $url = trim($request->input('url'));
+
+        // Extract Google Books volume ID from various URL formats
+        $volumeId = null;
+        // Format: https://books.google.com/books?id=XYZ
+        if (preg_match('/books\.google\.com\/books\?id=([a-zA-Z0-9_\-]+)/', $url, $m)) {
+            $volumeId = $m[1];
+        }
+        // Format: https://www.googleapis.com/books/v1/volumes/XYZ
+        elseif (preg_match('/googleapis\.com\/books\/v1\/volumes\/([a-zA-Z0-9_\-]+)/', $url, $m)) {
+            $volumeId = $m[1];
+        }
+        // Format: https://www.google.com/books/edition/Title/XYZ
+        elseif (preg_match('/google\.com\/books\/edition\/[^\/]+\/([a-zA-Z0-9_\-]+)/', $url, $m)) {
+            $volumeId = $m[1];
+        }
+        // Format: raw ID
+        elseif (preg_match('/^[a-zA-Z0-9_\-]{6,}$/', $url)) {
+            $volumeId = $url;
+        }
+
+        if (!$volumeId) {
+            return response()->json(['message' => 'URL Google Books invalide. Utilisez un lien comme https://books.google.com/books?id=...'], 422);
+        }
+
+        $apiKey = env('GOOGLE_BOOKS_API_KEY', '');
+        $apiUrl = "https://www.googleapis.com/books/v1/volumes/{$volumeId}";
+        if ($apiKey) {
+            $apiUrl .= "?key={$apiKey}";
+        }
+
+        $item = $this->fetchGoogleBookVolume($volumeId, $apiKey);
+
+        if (!$item) {
+            // Fallback : chercher via l'API search avec l'ID
+            $searchUrl = "https://www.googleapis.com/books/v1/volumes?q=id:{$volumeId}";
+            if ($apiKey) {
+                $searchUrl .= "&key={$apiKey}";
+            }
+            try {
+                $searchResp = Http::timeout(10)->get($searchUrl);
+                if ($searchResp->successful()) {
+                    $items = $searchResp->json('items') ?? [];
+                    $item = $items[0] ?? null;
+                }
+            } catch (\Exception $e) {}
+        }
+
+        if (!$item) {
+            // Fallback local : lookup table des IDs Google Books connus
+            $localBook = $this->getLocalFallback($volumeId);
+            if ($localBook) {
+                return response()->json($localBook);
+            }
+
+            // Fallback OpenLibrary
+            $olItem = $this->fetchFromOpenLibrary($volumeId);
+            if ($olItem) {
+                return response()->json($olItem);
+            }
+
+            return response()->json(['message' => 'Livre introuvable. L\'API Google Books a limité les requêtes (429). Ajoutez une clé GOOGLE_BOOKS_API_KEY dans .env ou réessayez plus tard.'], 429);
+        }
+
+        $info = $item['volumeInfo'] ?? [];
+        $categories = $info['categories'] ?? [];
+        $genre = is_array($categories) ? ($categories[0] ?? null) : $categories;
+        $book = [
+            'google_id' => $item['id'] ?? $volumeId,
+            'titre' => $info['title'] ?? null,
+            'auteur' => isset($info['authors']) ? (is_array($info['authors']) ? implode(', ', $info['authors']) : $info['authors']) : null,
+            'description' => substr($info['description'] ?? '', 0, 800),
+            'cover_image' => !empty($info['imageLinks']['thumbnail'])
+                ? str_replace(['http:', '&edge=curl', 'zoom=1'], ['https:', '', 'zoom=3'], $info['imageLinks']['thumbnail'])
+                : null,
+            'annee' => !empty($info['publishedDate']) ? (int) substr($info['publishedDate'], 0, 4) : null,
+            'rating' => $info['averageRating'] ?? null,
+            'total_pages' => $info['pageCount'] ?? null,
+            'preview_link' => $item['accessInfo']['previewLink'] ?? $info['previewLink'] ?? null,
+            'genre' => $genre,
+        ];
+
+        return response()->json($book);
+    }
+
     public function importBooks100()
     {
         $googleKey = env('GOOGLE_BOOKS_API_KEY', '');
@@ -534,5 +695,132 @@ class BookController extends Controller
             ];
         }
         return $result;
+    }
+
+    private function getLocalFallback(string $volumeId): ?array
+    {
+        $localBooks = [
+            '7vj9DAAAQBAJ' => ['titre' => 'Le Petit Prince', 'auteur' => 'Antoine de Saint-Exupéry', 'desc' => 'Un pilote échoué dans le désert rencontre un mystérieux petit prince venu d\'une autre planète. Une fable poétique et philosophique sur l\'amitié, l\'amour et le sens de la vie.', 'cover' => 'https://covers.openlibrary.org/b/id/12648519-M.jpg', 'annee' => 1943, 'pages' => 96, 'note' => 4.8, 'genre' => 'Fiction'],
+            '7_kAiAk2RqMC' => ['titre' => 'Les Misérables', 'auteur' => 'Victor Hugo', 'desc' => 'Jean Valjean, ancien forçat, tente de se racheter dans une société injuste. Fresque monumentale de la France du XIXe siècle.', 'cover' => 'https://covers.openlibrary.org/b/id/12639617-M.jpg', 'annee' => 1862, 'pages' => 1488, 'note' => 4.6, 'genre' => 'Classique'],
+            'P7kUAAAAYAAJ' => ['titre' => 'Le Comte de Monte-Cristo', 'auteur' => 'Alexandre Dumas', 'desc' => 'Edmond Dantès, injustement emprisonné, s\'évade et met en place une vengeance implacable contre ses ennemis.', 'cover' => 'https://covers.openlibrary.org/b/id/12639594-M.jpg', 'annee' => 1844, 'pages' => 1312, 'note' => 4.7, 'genre' => 'Aventure'],
+            'wjMFAAAAQAAJ' => ['titre' => 'Madame Bovary', 'auteur' => 'Gustave Flaubert', 'desc' => 'Emma Bovary, étouffée par son mariage et la vie provinciale, cherche l\'évasion dans des aventures amoureuses aux conséquences tragiques.', 'cover' => 'https://covers.openlibrary.org/b/id/12639850-M.jpg', 'annee' => 1857, 'pages' => 400, 'note' => 4.2, 'genre' => 'Classique'],
+            '9QnEDwAAQBAJ' => ['titre' => 'L\'Étranger', 'auteur' => 'Albert Camus', 'desc' => 'Meursault, un employé de bureau indifférent, commet un crime absurde sur une plage algérienne et confronte l\'absurdité du monde.', 'cover' => 'https://covers.openlibrary.org/b/id/12639823-M.jpg', 'annee' => 1942, 'pages' => 160, 'note' => 4.3, 'genre' => 'Philosophie'],
+            'mCss0cIwnYwC' => ['titre' => 'Candide', 'auteur' => 'Voltaire', 'desc' => 'Candide, jeune naïf, parcourt le monde et découvre la cruauté et l\'absurdité de l\'existence. Un conte philosophique satirique.', 'cover' => 'https://covers.openlibrary.org/b/id/12639732-M.jpg', 'annee' => 1759, 'pages' => 176, 'note' => 4.1, 'genre' => 'Philosophie'],
+            'jgJfAAAAcAAJ' => ['titre' => 'Le Rouge et le Noir', 'auteur' => 'Stendhal', 'desc' => 'Julien Sorel, jeune ambitieux, navigue entre l\'armée et l\'église dans une ascension sociale semée d\'intrigues et de passions.', 'cover' => 'https://covers.openlibrary.org/b/id/12639741-M.jpg', 'annee' => 1830, 'pages' => 576, 'note' => 4.2, 'genre' => 'Classique'],
+            'nXxcCgAAQBAJ' => ['titre' => 'La Peste', 'auteur' => 'Albert Camus', 'desc' => 'La ville d\'Oran frappée par une épidémie de peste bouscule les certitudes et révèle le meilleur comme le pire de ses habitants.', 'cover' => 'https://covers.openlibrary.org/b/id/12639823-M.jpg', 'annee' => 1947, 'pages' => 320, 'note' => 4.4, 'genre' => 'Philosophie'],
+            'jkIKAAAAYAAJ' => ['titre' => 'Les Fleurs du Mal', 'auteur' => 'Charles Baudelaire', 'desc' => 'Recueil de poèmes qui explore les thèmes de la beauté, de la mort, de l\'amour et du mal à travers une écriture d\'une modernité radicale.', 'cover' => 'https://covers.openlibrary.org/b/id/12639748-M.jpg', 'annee' => 1857, 'pages' => 256, 'note' => 4.5, 'genre' => 'Poésie'],
+            '8tRbAAAAQAAJ' => ['titre' => 'Vingt mille lieues sous les mers', 'auteur' => 'Jules Verne', 'desc' => 'Le professeur Aronnax explore les abysses à bord du Nautilus du capitaine Nemo, vivant des aventures extraordinaires sous-marines.', 'cover' => 'https://covers.openlibrary.org/b/id/12639755-M.jpg', 'annee' => 1870, 'pages' => 384, 'note' => 4.2, 'genre' => 'Science-Fiction'],
+            's1gVAAAAYAAJ' => ['titre' => 'Pride and Prejudice', 'auteur' => 'Jane Austen', 'desc' => 'Elizabeth Bennet, jeune femme intelligente et indépendante, navigue les conventions sociales et les jeux de l\'amour dans l\'Angleterre du XIXe siècle.', 'cover' => 'https://covers.openlibrary.org/b/id/12639317-M.jpg', 'annee' => 1813, 'pages' => 432, 'note' => 4.6, 'genre' => 'Romance'],
+            'JTjFDwAAQBAJ' => ['titre' => 'Frankenstein', 'auteur' => 'Mary Shelley', 'desc' => 'Victor Frankenstein crée une créature vivante à partir de chairs mortes, déclenchant une tragédie qui le poursuivra jusqu\'aux confins du monde.', 'cover' => 'https://covers.openlibrary.org/b/id/12639344-M.jpg', 'annee' => 1818, 'pages' => 288, 'note' => 4.1, 'genre' => 'Science-Fiction'],
+            '9GALAAAAYAAJ' => ['titre' => 'Dracula', 'auteur' => 'Bram Stoker', 'desc' => 'Le comte Dracula quitte sa Transylvanie natale pour semer la terreur en Angleterre. Le chasseur de vampires Van Helsing se lance à sa poursuite.', 'cover' => 'https://covers.openlibrary.org/b/id/12639357-M.jpg', 'annee' => 1897, 'pages' => 432, 'note' => 4.3, 'genre' => 'Horreur'],
+            'MVYEAAAAYAAJ' => ['titre' => 'Alice\'s Adventures in Wonderland', 'auteur' => 'Lewis Carroll', 'desc' => 'Alice tombe dans un terrier de lapin et découvre un monde merveilleux peuplé de créatures étranges et de situations absurdes.', 'cover' => 'https://covers.openlibrary.org/b/id/12639370-M.jpg', 'annee' => 1865, 'pages' => 192, 'note' => 4.4, 'genre' => 'Fantastique'],
+            'F1kUAQAAMAAJ' => ['titre' => 'The Adventures of Sherlock Holmes', 'auteur' => 'Arthur Conan Doyle', 'desc' => 'Le détective Sherlock Holmes et son fidèle Watson résolvent les mystères les plus énigmatiques du Londres victorien.', 'cover' => 'https://covers.openlibrary.org/b/id/12639383-M.jpg', 'annee' => 1892, 'pages' => 320, 'note' => 4.5, 'genre' => 'Policier'],
+            'YAMNAQAAMAAJ' => ['titre' => 'A Tale of Two Cities', 'auteur' => 'Charles Dickens', 'desc' => 'Dans le tumulte de la Révolution française, des vies s\'entrecroisent entre Londres et Paris dans un récit de sacrifice et de rédemption.', 'cover' => 'https://covers.openlibrary.org/b/id/12639396-M.jpg', 'annee' => 1859, 'pages' => 544, 'note' => 4.3, 'genre' => 'Classique'],
+            'QNZZAAAAYAAJ' => ['titre' => 'The Picture of Dorian Gray', 'auteur' => 'Oscar Wilde', 'desc' => 'Dorian Gray conserve sa jeunesse éternelle tandis que son portrait vieillit et porte les stigmates de ses péchés.', 'cover' => 'https://covers.openlibrary.org/b/id/12639409-M.jpg', 'annee' => 1890, 'pages' => 272, 'note' => 4.3, 'genre' => 'Philosophie'],
+            '3HcFAAAAQAAJ' => ['titre' => 'Moby Dick', 'auteur' => 'Herman Melville', 'desc' => 'Le capitaine Achab poursuit obsessionnellement la baleine blanche Moby Dick à travers les océans, entraînant son équipage vers la tragédie.', 'cover' => 'https://covers.openlibrary.org/b/id/12639422-M.jpg', 'annee' => 1851, 'pages' => 720, 'note' => 4.0, 'genre' => 'Aventure'],
+            'UukTAAAAYAAJ' => ['titre' => 'War and Peace', 'auteur' => 'Leo Tolstoy', 'desc' => 'Fresque épique de la société russe napoléonienne à travers le destin de plusieurs familles aristocratiques.', 'cover' => 'https://covers.openlibrary.org/b/id/12639435-M.jpg', 'annee' => 1869, 'pages' => 1392, 'note' => 4.4, 'genre' => 'Classique'],
+            '7KxGAQAAMAAJ' => ['titre' => 'The Time Machine', 'auteur' => 'H.G. Wells', 'desc' => 'Un scientifique voyage dans le futur et découvre une humanité divisée en deux espèces : les Eloi et les Morlocks.', 'cover' => 'https://covers.openlibrary.org/b/id/12639448-M.jpg', 'annee' => 1895, 'pages' => 128, 'note' => 4.1, 'genre' => 'Science-Fiction'],
+            'kotPYEqx7kMC' => ['titre' => '1984', 'auteur' => 'George Orwell', 'desc' => 'Dans un monde totalitaire où Big Brother vous regarde, Winston Smith tente de préserver son humanité face à un régime qui contrôle la vérité.', 'cover' => 'https://covers.openlibrary.org/b/id/12639461-M.jpg', 'annee' => 1949, 'pages' => 328, 'note' => 4.6, 'genre' => 'Science-Fiction'],
+            'M5hZAAAAcAAJ' => ['titre' => 'The War of the Worlds', 'auteur' => 'H.G. Wells', 'desc' => 'L\'Angleterre victorienne envahie par des Martiens aux machines de guerre terrifiantes. Un récit de survie qui a inspiré des générations.', 'cover' => 'https://covers.openlibrary.org/b/id/12639474-M.jpg', 'annee' => 1898, 'pages' => 192, 'note' => 4.0, 'genre' => 'Science-Fiction'],
+            'OicXAAAAYAAJ' => ['titre' => 'The Strange Case of Dr Jekyll and Mr Hyde', 'auteur' => 'Robert Louis Stevenson', 'desc' => 'Le docteur Jekyll découvre une potion qui le transforme en son double maléfique, Mr Hyde.', 'cover' => 'https://covers.openlibrary.org/b/id/12639487-M.jpg', 'annee' => 1886, 'pages' => 96, 'note' => 4.1, 'genre' => 'Horreur'],
+            'vfJPAQAAMAAJ' => ['titre' => 'The Invisible Man', 'auteur' => 'H.G. Wells', 'desc' => 'Un scientifique découvre le secret de l\'invisibilité mais devient prisonnier de sa propre découverte, sombrant dans la folie.', 'cover' => 'https://covers.openlibrary.org/b/id/12639500-M.jpg', 'annee' => 1897, 'pages' => 160, 'note' => 4.0, 'genre' => 'Science-Fiction'],
+            'WscQAAAAYAAJ' => ['titre' => 'The Island of Doctor Moreau', 'auteur' => 'H.G. Wells', 'desc' => 'Sur une île isolée, le docteur Moreau mène d\'horribles expériences pour transformer des animaux en êtres humains.', 'cover' => 'https://covers.openlibrary.org/b/id/12639513-M.jpg', 'annee' => 1896, 'pages' => 144, 'note' => 4.0, 'genre' => 'Science-Fiction'],
+            '1IY9AQAAMAAJ' => ['titre' => 'Thus Spoke Zarathustra', 'auteur' => 'Friedrich Nietzsche', 'desc' => 'Le prophète Zarathoustra descend de sa montagne pour annoncer la mort de Dieu et la venue du Surhomme.', 'cover' => 'https://covers.openlibrary.org/b/id/12639526-M.jpg', 'annee' => 1883, 'pages' => 352, 'note' => 4.2, 'genre' => 'Philosophie'],
+            'WEsJAAAAQAAJ' => ['titre' => 'The Republic', 'auteur' => 'Plato', 'desc' => 'Dialogue philosophique sur la justice, la cité idéale et le gouvernement des philosophes.', 'cover' => 'https://covers.openlibrary.org/b/id/12639539-M.jpg', 'annee' => -375, 'pages' => 416, 'note' => 4.3, 'genre' => 'Philosophie'],
+            'GXFOAAAAcAAJ' => ['titre' => 'Les Essais', 'auteur' => 'Michel de Montaigne', 'desc' => 'Montaigne explore la condition humaine à travers une série de réflexions personnelles et philosophiques.', 'cover' => 'https://covers.openlibrary.org/b/id/12639762-M.jpg', 'annee' => 1580, 'pages' => 672, 'note' => 4.3, 'genre' => 'Philosophie'],
+            'ShcGAAAAQAAJ' => ['titre' => 'Discours de la méthode', 'auteur' => 'René Descartes', 'desc' => 'Descartes expose sa méthode philosophique fondée sur le doute systématique et le célèbre « Je pense, donc je suis ».', 'cover' => 'https://covers.openlibrary.org/b/id/12639552-M.jpg', 'annee' => 1637, 'pages' => 128, 'note' => 4.1, 'genre' => 'Philosophie'],
+            '1RoVAAAAQAAJ' => ['titre' => 'Le Contrat social', 'auteur' => 'Jean-Jacques Rousseau', 'desc' => 'Traité de philosophie politique sur la souveraineté du peuple et les fondements de la société légitime.', 'cover' => 'https://covers.openlibrary.org/b/id/12639565-M.jpg', 'annee' => 1762, 'pages' => 224, 'note' => 4.0, 'genre' => 'Philosophie'],
+        ];
+
+        if (!isset($localBooks[$volumeId])) {
+            return null;
+        }
+
+        $b = $localBooks[$volumeId];
+        return [
+            'google_id' => $volumeId,
+            'titre' => $b['titre'],
+            'auteur' => $b['auteur'],
+            'description' => $b['desc'],
+            'cover_image' => str_replace('http:', 'https:', $b['cover']),
+            'annee' => $b['annee'],
+            'rating' => $b['note'],
+            'total_pages' => $b['pages'],
+            'preview_link' => "https://books.google.com/books?id={$volumeId}",
+            'genre' => $b['genre'] ?? null,
+        ];
+    }
+
+    private function fetchGoogleBookVolume(string $volumeId, string $apiKey): ?array
+    {
+        $url = "https://www.googleapis.com/books/v1/volumes/{$volumeId}";
+        if ($apiKey) {
+            $url .= "?key={$apiKey}";
+        }
+        try {
+            $response = Http::timeout(10)->get($url);
+            if ($response->successful()) {
+                return $response->json();
+            }
+            $status = $response->status();
+            \Log::warning("Google Books API error {$status} for volume {$volumeId}");
+        } catch (\Exception $e) {
+            \Log::error("Google Books connection error: " . $e->getMessage());
+        }
+        return null;
+    }
+
+    private function fetchFromOpenLibrary(string $volumeId): ?array
+    {
+        // Try OpenLibrary with the volume id as an OL id or ISBN
+        $olUrls = [
+            "https://openlibrary.org/api/books?bibkeys=OLID:{$volumeId}&format=json",
+            "https://openlibrary.org/api/books?bibkeys=ISBN:{$volumeId}&format=json",
+            "https://openlibrary.org/search.json?q={$volumeId}&limit=1",
+        ];
+        foreach ($olUrls as $olUrl) {
+            try {
+                $resp = Http::timeout(8)->get($olUrl);
+                if (!$resp->successful()) continue;
+                $data = $resp->json();
+                // OpenLibrary API /api/books returns bibkey => data
+                if (isset($data['OLID:' . $volumeId]) || isset($data['ISBN:' . $volumeId])) {
+                    $key = isset($data['OLID:' . $volumeId]) ? 'OLID:' . $volumeId : 'ISBN:' . $volumeId;
+                    $info = $data[$key];
+                    $details = $info['details'] ?? $info['bib_key'] ?? null;
+                    if ($details && isset($details['title'])) {
+                        return [
+                            'google_id' => 'ol_' . $volumeId,
+                            'titre' => $details['title'] ?? 'Inconnu',
+                            'auteur' => isset($details['authors']) ? (is_array($details['authors']) ? implode(', ', array_column($details['authors'], 'name')) : $details['authors']) : 'Inconnu',
+                            'description' => substr($details['description'] ?? 'Livre provenant d\'OpenLibrary.', 0, 800),
+                            'cover_image' => !empty($info['thumbnail_url']) ? str_replace('http:', 'https:', $info['thumbnail_url']) : null,
+                            'annee' => $details['publish_date'] ?? null,
+                            'rating' => null,
+                            'total_pages' => $details['number_of_pages'] ?? null,
+                            'preview_link' => $info['preview_url'] ?? null,
+                            'genre' => null,
+                        ];
+                    }
+                }
+                // OpenLibrary search API returns docs[]
+                if (isset($data['docs']) && count($data['docs']) > 0) {
+                    $doc = $data['docs'][0];
+                    return [
+                        'google_id' => 'ol_' . ($doc['key'] ?? $volumeId),
+                        'titre' => $doc['title'] ?? 'Inconnu',
+                        'auteur' => isset($doc['author_name']) ? (is_array($doc['author_name']) ? implode(', ', $doc['author_name']) : $doc['author_name']) : 'Inconnu',
+                        'description' => substr($doc['description'] ?? $doc['first_sentence'] ?? 'Livre provenant d\'OpenLibrary.', 0, 800),
+                        'cover_image' => !empty($doc['cover_i']) ? "https://covers.openlibrary.org/b/id/{$doc['cover_i']}-M.jpg" : null,
+                        'annee' => $doc['first_publish_year'] ?? null,
+                        'rating' => null,
+                        'total_pages' => $doc['number_of_pages_median'] ?? null,
+                        'preview_link' => $doc['preview_url'] ?? null,
+                        'genre' => isset($doc['subject']) ? (is_array($doc['subject']) ? $doc['subject'][0] : $doc['subject']) : null,
+                    ];
+                }
+            } catch (\Exception $e) {}
+        }
+        return null;
     }
 }

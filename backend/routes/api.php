@@ -25,6 +25,8 @@ use App\Http\Controllers\Api\BookController;
 use App\Http\Controllers\Api\BookDetailController;
 use App\Http\Controllers\Api\AdminController;
 use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\ContactController;
+use App\Http\Controllers\Api\ChatbotController;
 
 /* --- Routes protégées (token Sanctum requis) --- */
 Route::middleware('auth:sanctum')->group(function () {
@@ -84,11 +86,33 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
     Route::patch('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
 
-    // Admin : import massif, gestion des réservations
+    // Recherche et import depuis API externe (accessible à tout utilisateur connecté)
+    Route::post('/books/search-api', [BookController::class, 'searchExternalApi']);
+    Route::post('/books/fetch-from-url', [BookController::class, 'fetchFromUrl']);
+    Route::post('/books/import-selected', [BookController::class, 'importSelected']);
+
+    // Contact / Messagerie
+    Route::post('/contacts', [ContactController::class, 'store']);
+    Route::get('/contacts/mine', [ContactController::class, 'mine']);
+
+    // Chatbot
+    Route::post('/chat', [ChatbotController::class, 'ask']);
+
+    // Admin : import massif, gestion des réservations, messagerie
     Route::middleware('admin')->group(function () {
         Route::post('/books/import-100', [BookController::class, 'importBooks100']);
         Route::get('/admin/reservations/pending', [AdminController::class, 'pendingReservations']);
         Route::post('/admin/reservations/{id}/approve', [AdminController::class, 'approve']);
         Route::post('/admin/reservations/{id}/reject', [AdminController::class, 'reject']);
+        Route::get('/admin/contacts', [ContactController::class, 'index']);
+        Route::get('/admin/contacts/{contact}', [ContactController::class, 'show']);
+        Route::patch('/admin/contacts/{contact}/read', [ContactController::class, 'markAsRead']);
+        Route::post('/admin/contacts/{contact}/reply', [ContactController::class, 'reply']);
+        Route::delete('/admin/contacts/{contact}', [ContactController::class, 'destroy']);
+        Route::get('/admin/users', [AdminController::class, 'users']);
+        Route::get('/admin/users/{utilisateur}', [AdminController::class, 'userDetail']);
+        Route::patch('/admin/users/{utilisateur}/toggle-block', [AdminController::class, 'toggleBlock']);
+        Route::patch('/admin/users/{utilisateur}/role', [AdminController::class, 'updateRole']);
+        Route::delete('/admin/users/{utilisateur}', [AdminController::class, 'destroyUser']);
     });
 });

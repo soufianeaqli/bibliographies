@@ -130,6 +130,26 @@ export const getHistory = async () => {
     return data;
 };
 
+export const fetchFromUrl = async (url) => {
+    const { data } = await client.post('/books/fetch-from-url', { url });
+    return data;
+};
+
+export const getSuggestedBooks = async () => {
+    const { data } = await client.get('/books/suggested');
+    return data;
+};
+
+export const searchExternalApi = async (query) => {
+    const { data } = await client.post('/books/search-api', { query });
+    return data;
+};
+
+export const importSelected = async (bookData) => {
+    const { data } = await client.post('/books/import-selected', bookData);
+    return data;
+};
+
 export const getPendingReservations = async () => {
     const { data } = await client.get('/admin/reservations/pending');
     return data;
@@ -142,5 +162,45 @@ export const approveReservation = async (id) => {
 
 export const rejectReservation = async (id) => {
     const { data } = await client.post(`/admin/reservations/${id}/reject`);
+    return data;
+};
+
+export const submitContact = async (payload) => {
+    const { data } = await client.post('/contacts', payload);
+    return data;
+};
+
+export const getAdminContacts = async () => {
+    const { data } = await client.get('/admin/contacts');
+    return data;
+};
+
+export const getAdminContact = async (id) => {
+    const { data } = await client.get(`/admin/contacts/${id}`);
+    return data;
+};
+
+export const markContactRead = async (id) => {
+    const { data } = await client.patch(`/admin/contacts/${id}/read`);
+    return data;
+};
+
+export const replyContact = async (id, reponse) => {
+    const { data } = await client.post(`/admin/contacts/${id}/reply`, { reponse });
+    return data;
+};
+
+export const deleteContact = async (id) => {
+    const { data } = await client.delete(`/admin/contacts/${id}`);
+    return data;
+};
+
+export const getMyContacts = async () => {
+    const { data } = await client.get('/contacts/mine');
+    return data;
+};
+
+export const askChatbot = async (message) => {
+    const { data } = await client.post('/chat', { message });
     return data;
 };

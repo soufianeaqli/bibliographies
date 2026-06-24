@@ -1,12 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Search, Sparkles, MessageSquare, Flame, Star, ChevronRight, BookOpen, Send, Play, Clock, Loader, X, Film, Calendar, Book, ExternalLink, Heart } from 'lucide-react';
-import { fetchBooks, addFavori, removeFavori, getFavoris, getCategories } from '../api/libraryClient';
+import { useNavigate } from 'react-router-dom';
+import { Search, Sparkles, MessageSquare, Flame, Star, ChevronRight, BookOpen, Send, Play, Loader, X, Film, Calendar, Book, ExternalLink, Heart } from 'lucide-react';
+import { fetchBooks, addFavori, removeFavori, getFavoris, askChatbot } from '../api/libraryClient';
 
 export default function UserLibrary() {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [activeFilter, setActiveFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [chatInput, setChatInput] = useState('');
   const [books, setBooks] = useState([]);
@@ -18,10 +16,11 @@ export default function UserLibrary() {
   const [favoriLoading, setFavoriLoading] = useState(false);
   const [favoriError, setFavoriError] = useState('');
   const booksPerPage = 30;
-  const [categories, setCategories] = useState([]);
   const [chatMessages, setChatMessages] = useState([
-    { text: "Bonjour ! Quel livre allez-vous dévorer aujourd'hui ?", isBot: true }
+    { text: "Bonjour ! Quel livre allez-vous dévorer aujourd'hui ?", isBot: true, livres: null }
   ]);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [expandedBook, setExpandedBook] = useState(null);
 
   useEffect(() => {
       fetchBooks()
@@ -36,28 +35,14 @@ export default function UserLibrary() {
     }).catch(() => {});
   }, []);
 
-  useEffect(() => {
-    getCategories().then(setCategories).catch(() => {});
-  }, []);
+  useEffect(() => { setCurrentPage(1); }, [searchQuery]);
 
-  useEffect(() => {
-    const genreFromUrl = searchParams.get('genre');
-    if (genreFromUrl) {
-      setActiveFilter(genreFromUrl);
-    }
-  }, [searchParams]);
-
-  useEffect(() => { setCurrentPage(1); }, [searchQuery, activeFilter]);
-
-  const filteredBooks = books.filter(book => {
-    const matchesSearch = !searchQuery ||
-      book.titre?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      book.auteur?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesFilter = activeFilter === 'All' ||
-      (activeFilter === 'Audiobooks' && book.audio_path) ||
-      (book.genre === activeFilter);
-    return matchesSearch && matchesFilter;
-  });
+  const filteredBooks = searchQuery
+    ? books.filter(book =>
+        book.titre?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        book.auteur?.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : books;
 
   const totalPages = Math.ceil(filteredBooks.length / booksPerPage);
   const paginatedBooks = filteredBooks.slice(
@@ -65,17 +50,53 @@ export default function UserLibrary() {
     currentPage * booksPerPage
   );
 
-  const handleChat = (e) => {
-    e.preventDefault();
-    if (!chatInput.trim()) return;
-    setChatMessages([...chatMessages, { text: chatInput, isBot: false }]);
-    setChatInput('');
-    setTimeout(() => {
-       setChatMessages(prev => [...prev, { text: "Laissez-moi chercher cela dans notre immense collection...", isBot: true }]);
-    }, 1000);
+  const sendChatMessage = async (text) => {
+    if (!text.trim() || chatLoading) return;
+    setChatMessages(prev => [...prev, { text, isBot: false, livres: null }]);
+    setChatLoading(true);
+    try {
+      const data = await askChatbot(text);
+      setChatMessages(prev => [...prev, { text: data.reponse, isBot: true, livres: data.livres || [] }]);
+    } catch {
+      setChatMessages(prev => [...prev, { text: "Désolé, je n'ai pas pu traiter votre demande. Réessayez.", isBot: true, livres: null }]);
+    }
+    setChatLoading(false);
   };
 
-  const truncate = (str, len) => str?.length > len ? str.slice(0, len) + '...' : str;
+  const handleChat = async (e) => {
+    e.preventDefault();
+    await sendChatMessage(chatInput);
+    setChatInput('');
+  };
+
+  const handleBookInfo = (book) => {
+    if (expandedBook?.id === book.id) {
+      setExpandedBook(null);
+      return;
+    }
+    setExpandedBook(book);
+    const lines = [
+      `📖 ${book.titre}`,
+      `✍️ ${book.auteur}`,
+      book.annee && `📅 ${book.annee}`,
+      book.genre && `🏷️ ${book.genre}`,
+      book.publisher && `🏢 ${book.publisher}`,
+      book.language && `🌐 Langue : ${book.language.toUpperCase()}`,
+      book.total_pages > 0 && `📄 ${book.total_pages} pages`,
+      book.rating > 0 && `⭐ ${book.rating}/5`,
+      (book.isbn_13 || book.isbn_10) && `🔗 ISBN : ${book.isbn_13 || book.isbn_10}`,
+      book.isbn && `🔗 ISBN : ${book.isbn}`,
+      book.date_creation && `📆 Ajouté le ${book.date_creation}`,
+      book.video_url && `🎬 Bande-annonce : ${book.video_url}`,
+      book.source && `🔍 Source : ${
+        book.source === 'google_books' ? 'Google Books' :
+        book.source === 'open_library' ? 'OpenLibrary' :
+        book.source === 'bibliotheque' ? 'Bibliothèque' : book.source
+      }`,
+      book.description && `\n${book.description}`,
+    ].filter(Boolean).join('\n');
+    setChatMessages(prev => [...prev, { text: lines, isBot: true, livres: null }]);
+  };
 
   return (
     <div className="flex-1 relative pb-20 overflow-y-auto custom-scrollbar">
@@ -95,30 +116,7 @@ export default function UserLibrary() {
                 className="w-full bg-transparent text-white placeholder-[#D4AF37]/50 ml-6 focus:outline-none font-bold text-lg"
               />
               <Sparkles className="w-6 h-6 text-purple-400 animate-pulse" />
-           </div>
-
-           <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 custom-scrollbar">
-              {[{ label: 'All', icon: null }, { label: 'Audiobooks', icon: null }, ...categories.map(c => ({ label: c.genre, icon: null }))].map(f => (
-                <button
-                  key={f.label}
-                  onClick={() => {
-                    setActiveFilter(f.label);
-                    if (f.label === 'All' || f.label === 'Audiobooks') {
-                      setSearchParams({}, { replace: true });
-                    } else {
-                      setSearchParams({ genre: f.label }, { replace: true });
-                    }
-                  }}
-                  className={`px-6 py-3 rounded-xl font-bold whitespace-nowrap transition-all border ${
-                    activeFilter === f.label
-                    ? 'bg-[#D4AF37] text-black border-[#D4AF37] shadow-[0_0_15px_rgba(212,175,55,0.4)]'
-                    : 'bg-[#1C1812] text-gray-400 border-[#2C261A] hover:border-white'
-                  }`}
-                >
-                  {f.label}
-                </button>
-              ))}
-           </div>
+            </div>
         </div>
       </div>
 
@@ -249,42 +247,6 @@ export default function UserLibrary() {
         {/* Right Sidebar */}
         <div className="w-full xl:w-[380px] shrink-0 space-y-8">
 
-          {/* Currently Reading */}
-          {filteredBooks.length > 0 && (
-            <div className="bg-[#14120E]/90 backdrop-blur-xl border border-[#2C261A] rounded-2xl p-6">
-              <h3 className="text-lg font-bold text-white mb-5 flex items-center gap-2">
-                <Clock className="w-5 h-5 text-[#D4AF37]" /> En cours de lecture
-              </h3>
-              <div className="flex gap-4">
-                <div
-                  onClick={() => navigate(`/book/${filteredBooks[0].id}`)}
-                  className="w-20 h-28 rounded-lg overflow-hidden shrink-0 border border-[#2C261A] cursor-pointer hover:border-[#D4AF37]/50 transition-colors"
-                >
-                  {filteredBooks[0].cover_image
-                    ? <img src={filteredBooks[0].cover_image} alt={filteredBooks[0].titre} className="w-full h-full object-cover" />
-                    : <div className="w-full h-full bg-[#1C1812] flex items-center justify-center text-[8px] text-gray-500 font-bold p-1 text-center">{filteredBooks[0].titre}</div>
-                  }
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-white truncate">{filteredBooks[0].titre}</p>
-                  <p className="text-xs text-gray-500 truncate">{filteredBooks[0].auteur}</p>
-                  <div className="mt-3">
-                    <div className="flex justify-between text-xs text-gray-500 mb-1">
-                      <span>Progression</span>
-                      <span className="text-[#D4AF37] font-bold">--%</span>
-                    </div>
-                    <div className="w-full bg-[#0E0C0A] h-1.5 rounded-full overflow-hidden border border-[#2C261A]">
-                      <div className="h-full bg-gradient-to-r from-[#D4AF37] to-amber-400 w-0 rounded-full"></div>
-                    </div>
-                  </div>
-                  <button onClick={() => navigate(`/reader/${filteredBooks[0].id}`)} className="mt-3 text-xs text-[#D4AF37] font-bold uppercase tracking-wider hover:text-white transition-colors flex items-center gap-1">
-                    Lire <ChevronRight className="w-3 h-3" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* AI Assistant */}
           <div className="flex flex-col h-[420px] bg-[#14120E]/90 backdrop-blur-lg border border-[#2C261A] rounded-2xl overflow-hidden shadow-xl">
             <div className="p-5 border-b border-[#2C261A] flex items-center gap-3">
@@ -302,7 +264,7 @@ export default function UserLibrary() {
 
             <div className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
                {chatMessages.map((msg, i) => (
-                 <div key={i} className={`flex ${msg.isBot ? 'justify-start' : 'justify-end'}`}>
+                 <div key={i} className={`flex flex-col ${msg.isBot ? 'items-start' : 'items-end'}`}>
                     <div className={`max-w-[85%] p-3 rounded-xl text-sm leading-relaxed ${
                       msg.isBot
                         ? 'bg-[#1C1812] text-gray-300 border border-[#2C261A]'
@@ -310,22 +272,67 @@ export default function UserLibrary() {
                     }`}>
                        {msg.text}
                     </div>
+                    {msg.isBot && msg.livres?.length > 0 && (
+                      <div className="mt-2 space-y-2 w-full max-w-[95%]">
+                        {msg.livres.slice(0, 4).map((book) => (
+                          <React.Fragment key={book.id}>
+                            <div
+                              onClick={() => handleBookInfo(book)}
+                              className="flex items-start gap-3 bg-[#1C1812] rounded-xl p-3 border border-[#2C261A] cursor-pointer hover:border-[#D4AF37]/50 hover:bg-[#1C1812]/80 transition-all"
+                            >
+                              <div className="w-12 h-16 rounded-lg overflow-hidden shrink-0 bg-[#0E0C0A] border border-[#2C261A]">
+                                {book.cover_image
+                                  ? <img src={book.cover_image} alt="" className="w-full h-full object-cover" />
+                                  : <div className="w-full h-full flex items-center justify-center text-[7px] text-gray-500 font-bold p-0.5 text-center">{book.titre}</div>
+                                }
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs font-bold text-white truncate">{book.titre}</p>
+                                <p className="text-[10px] text-gray-500 truncate">{book.auteur}</p>
+                                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                  {book.genre && (
+                                    <span className="text-[9px] uppercase tracking-wider text-[#D4AF37]/70 font-bold">{book.genre}</span>
+                                  )}
+                                  {book.rating > 0 && (
+                                    <span className="text-[10px] text-yellow-400">⭐ {book.rating}</span>
+                                  )}
+                                  {book.total_pages > 0 && (
+                                    <span className="text-[9px] text-gray-500">{book.total_pages} p.</span>
+                                  )}
+                                </div>
+                                {book.description && (
+                                  <p className="text-[10px] text-gray-500 mt-1 line-clamp-2 leading-relaxed">{book.description}</p>
+                                )}
+                              </div>
+                            </div>
+                          </React.Fragment>
+                        ))}
+                      </div>
+                    )}
                  </div>
                ))}
+               {chatLoading && (
+                 <div className="flex justify-start">
+                   <div className="bg-[#1C1812] text-gray-400 border border-[#2C261A] p-3 rounded-xl text-sm flex items-center gap-2">
+                     <Loader className="w-3.5 h-3.5 animate-spin" /> Réflexion en cours...
+                   </div>
+                 </div>
+               )}
             </div>
 
             <div className="p-4 border-t border-[#2C261A]">
               <form onSubmit={handleChat} className="flex gap-2">
-                <input
-                  type="text"
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  placeholder="Posez une question..."
-                  className="flex-1 bg-[#1C1812] border border-[#2C261A] rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#D4AF37]/50 transition-colors placeholder-gray-600"
-                />
-                <button type="submit" className="bg-[#D4AF37] hover:bg-white text-black p-2.5 rounded-xl transition-colors">
-                  <Send className="w-4 h-4"/>
-                </button>
+                  <input
+                    type="text"
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    placeholder="Posez une question..."
+                    disabled={chatLoading}
+                    className="flex-1 bg-[#1C1812] border border-[#2C261A] rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#D4AF37]/50 transition-colors placeholder-gray-600 disabled:opacity-50"
+                  />
+                  <button type="submit" disabled={chatLoading} className="bg-[#D4AF37] hover:bg-white text-black p-2.5 rounded-xl transition-colors disabled:opacity-50">
+                    {chatLoading ? <Loader className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4"/>}
+                  </button>
               </form>
             </div>
           </div>

@@ -2,8 +2,8 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { 
   Library, Home, BookOpen, LayoutGrid, Star, Clock, 
-  FileText, Tag, User, Settings, LogOut, Bell, Book, ShieldCheck, X,
-  Check, CheckCheck, Loader, BookOpen as BookIcon
+  FileText, Tag, User, LogOut, Bell, Book, ShieldCheck, X,
+  Check, CheckCheck, Loader, MessageSquare, Users, BookOpen as BookIcon
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -56,7 +56,9 @@ export default function LibraryLayout() {
     ? [
         { icon: Home, label: 'Dashboard', path: '/bibliotheque' },
         { icon: BookOpen, label: 'Livres', path: '/bibliotheque/livres' },
+        { icon: Users, label: 'Utilisateurs', path: '/bibliotheque/utilisateurs' },
         { icon: ShieldCheck, label: 'Réservations', path: '/bibliotheque/reservations' },
+        { icon: MessageSquare, label: 'Messagerie', path: '/bibliotheque/messagerie' },
         { icon: User, label: 'Profil', path: '/bibliotheque/profil' },
       ]
     : [
@@ -68,8 +70,8 @@ export default function LibraryLayout() {
         { icon: Clock, label: 'Historiques', path: '/bibliotheque/historique' },
         { icon: FileText, label: 'Notes', path: '/bibliotheque/notes' },
         { icon: Tag, label: 'Recommandations', path: '/bibliotheque/recommandations' },
+        { icon: MessageSquare, label: 'Contact', path: '/bibliotheque/contact' },
         { icon: User, label: 'Profil', path: '/bibliotheque/profil' },
-        { icon: Settings, label: 'Paramètres', path: '/bibliotheque/parametres' },
       ];
 
   return (

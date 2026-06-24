@@ -10,7 +10,10 @@ import BookReaderPage from './pages/BookReaderPage';
 import BookDetailPage from './pages/BookDetailPage';
 import MesLivres from './pages/MesLivres';
 import GestionReservations from './pages/GestionReservations';
-import { Accueil, Categories, Favoris, Historiques, Notes, Recommandations, Profil, Parametres } from './pages/LibrarySubPages';
+import { Accueil, Categories, Favoris, Historiques, Notes, Recommandations, Profil } from './pages/LibrarySubPages';
+import ContactPage from './pages/ContactPage';
+import AdminMessagerie from './components/AdminMessagerie';
+import AdminUsers from './components/AdminUsers';
 
 export default function App() {
   return (
@@ -44,7 +47,9 @@ export default function App() {
         <Route path="notes" element={<Notes />} />
         <Route path="recommandations" element={<Recommandations />} />
         <Route path="profil" element={<Profil />} />
-        <Route path="parametres" element={<Parametres />} />
+        <Route path="contact" element={<ContactPage />} />
+        <Route path="messagerie" element={<AdminMessagerie />} />
+        <Route path="utilisateurs" element={<AdminUsers />} />
       </Route>
 
       {/* Book detail */}
