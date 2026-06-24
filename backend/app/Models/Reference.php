@@ -50,6 +50,7 @@ class Reference extends Model
         'is_archived',
         'rating',
         'total_pages',
+        'genre',
     ];
 
     protected function casts(): array

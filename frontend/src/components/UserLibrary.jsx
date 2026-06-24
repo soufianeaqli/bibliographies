@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, Sparkles, MessageSquare, Flame, Star, ChevronRight, BookOpen, Send, Play, Clock, Loader, X, Film, Calendar, Book, ExternalLink, Heart } from 'lucide-react';
-import { fetchBooks, addFavori, removeFavori, getFavoris } from '../api/libraryClient';
+import { fetchBooks, addFavori, removeFavori, getFavoris, getCategories } from '../api/libraryClient';
 
 export default function UserLibrary() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeFilter, setActiveFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [chatInput, setChatInput] = useState('');
@@ -17,6 +18,7 @@ export default function UserLibrary() {
   const [favoriLoading, setFavoriLoading] = useState(false);
   const [favoriError, setFavoriError] = useState('');
   const booksPerPage = 30;
+  const [categories, setCategories] = useState([]);
   const [chatMessages, setChatMessages] = useState([
     { text: "Bonjour ! Quel livre allez-vous dévorer aujourd'hui ?", isBot: true }
   ]);
@@ -34,6 +36,17 @@ export default function UserLibrary() {
     }).catch(() => {});
   }, []);
 
+  useEffect(() => {
+    getCategories().then(setCategories).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const genreFromUrl = searchParams.get('genre');
+    if (genreFromUrl) {
+      setActiveFilter(genreFromUrl);
+    }
+  }, [searchParams]);
+
   useEffect(() => { setCurrentPage(1); }, [searchQuery, activeFilter]);
 
   const filteredBooks = books.filter(book => {
@@ -42,9 +55,7 @@ export default function UserLibrary() {
       book.auteur?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesFilter = activeFilter === 'All' ||
       (activeFilter === 'Audiobooks' && book.audio_path) ||
-      (activeFilter === 'Nouveautés') ||
-      (activeFilter === 'Science-Fiction') ||
-      (activeFilter === 'Histoire');
+      (book.genre === activeFilter);
     return matchesSearch && matchesFilter;
   });
 
@@ -87,17 +98,24 @@ export default function UserLibrary() {
            </div>
 
            <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 custom-scrollbar">
-              {['All', 'Nouveautés', 'Science-Fiction', 'Histoire', 'Audiobooks'].map(f => (
+              {[{ label: 'All', icon: null }, { label: 'Audiobooks', icon: null }, ...categories.map(c => ({ label: c.genre, icon: null }))].map(f => (
                 <button
-                  key={f}
-                  onClick={() => setActiveFilter(f)}
+                  key={f.label}
+                  onClick={() => {
+                    setActiveFilter(f.label);
+                    if (f.label === 'All' || f.label === 'Audiobooks') {
+                      setSearchParams({}, { replace: true });
+                    } else {
+                      setSearchParams({ genre: f.label }, { replace: true });
+                    }
+                  }}
                   className={`px-6 py-3 rounded-xl font-bold whitespace-nowrap transition-all border ${
-                    activeFilter === f
+                    activeFilter === f.label
                     ? 'bg-[#D4AF37] text-black border-[#D4AF37] shadow-[0_0_15px_rgba(212,175,55,0.4)]'
                     : 'bg-[#1C1812] text-gray-400 border-[#2C261A] hover:border-white'
                   }`}
                 >
-                  {f}
+                  {f.label}
                 </button>
               ))}
            </div>
@@ -163,6 +181,9 @@ export default function UserLibrary() {
                       <div className="p-3">
                         <h3 className="text-sm font-bold text-white truncate group-hover:text-[#D4AF37] transition-colors">{book.titre}</h3>
                         <p className="text-xs text-gray-500 truncate mt-1">{book.auteur}</p>
+                        {book.genre && (
+                          <span className="inline-block mt-1.5 text-[10px] uppercase tracking-wider text-[#D4AF37]/80 font-bold">{book.genre}</span>
+                        )}
                         {book.rating > 0 && (
                           <div className="flex items-center gap-1 mt-2">
                             <Star className="w-3 h-3 text-yellow-500 fill-yellow-500" />

@@ -13,6 +13,7 @@ class Bookmark extends Model
         'reference_id',
         'page_number',
         'note',
+        'page_text',
     ];
 
     public function utilisateur()

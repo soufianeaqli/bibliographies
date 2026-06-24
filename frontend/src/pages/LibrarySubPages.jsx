@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Home, LayoutGrid, Star, Clock, FileText, Tag, User, Settings, Play, BookOpen, Trash2, Edit2, Search, ArrowRight, ShieldCheck, ChevronRight, Sparkles, Heart, Loader } from 'lucide-react';
+import { Home, LayoutGrid, Star, Clock, FileText, Tag, User, Settings, Play, BookOpen, Trash2, Search, ArrowRight, ShieldCheck, ChevronRight, Sparkles, Heart, Loader } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { fetchBooks, getFavoris, removeFavori, reserveBook } from '../api/libraryClient';
+import { fetchBooks, getFavoris, removeFavori, reserveBook, getMyBookmarks, deleteBookmark, getCategories, getHistory } from '../api/libraryClient';
 
 const PageHeader = ({ icon: Icon, title, desc }) => (
   <div className="px-8 pt-10 pb-6 relative z-10">
@@ -261,33 +261,65 @@ export const Accueil = () => {
 );
 };
 
+const categoryColors = {
+  'Science-Fiction': 'from-blue-900/40 to-[#0E0C0A]',
+  'Fantaisie': 'from-purple-900/40 to-[#0E0C0A]',
+  'Histoire': 'from-amber-900/40 to-[#0E0C0A]',
+  'Littérature': 'from-green-900/40 to-[#0E0C0A]',
+  'Aventure': 'from-teal-900/40 to-[#0E0C0A]',
+  'Philosophie': 'from-rose-900/40 to-[#0E0C0A]',
+  'Psychologie': 'from-indigo-900/40 to-[#0E0C0A]',
+  'Poésie': 'from-[#D4AF37]/20 to-[#0E0C0A]',
+};
+const defaultColor = 'from-gray-900/40 to-[#0E0C0A]';
+
 export const Categories = () => {
-  const cats = [
-    { name: 'Science-Fiction', count: 1240, color: 'from-blue-900/40 to-[#0E0C0A]' },
-    { name: 'Fantaisie', count: 850, color: 'from-purple-900/40 to-[#0E0C0A]' },
-    { name: 'Histoire', count: 530, color: 'from-amber-900/40 to-[#0E0C0A]' },
-    { name: 'Technologie', count: 1100, color: 'from-green-900/40 to-[#0E0C0A]' },
-    { name: 'Philosophie', count: 420, color: 'from-rose-900/40 to-[#0E0C0A]' },
-    { name: 'Art & Design', count: 310, color: 'from-teal-900/40 to-[#0E0C0A]' },
-    { name: 'Biographies', count: 680, color: 'from-indigo-900/40 to-[#0E0C0A]' },
-    { name: 'Business', count: 950, color: 'from-[#D4AF37]/20 to-[#0E0C0A]' },
-  ];
+  const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    getCategories()
+      .then(setCategories)
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
 
   return (
     <PageContainer>
       <PageHeader icon={LayoutGrid} title="Catégories" desc="Parcourez la vaste bibliothèque par genres." />
-      <div className="px-8 mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 pb-12">
-         {cats.map(cat => (
-           <div key={cat.name} className={`relative h-40 bg-gradient-to-br ${cat.color} backdrop-blur-md border border-[#2C261A] rounded-2xl p-6 cursor-pointer group overflow-hidden shadow-xl hover:shadow-[0_10px_30px_rgba(0,0,0,0.8)] hover:-translate-y-1 transition-all duration-300`}>
-              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-30 transition-opacity">
-                <LayoutGrid className="w-16 h-16 text-white" />
+      <div className="px-8 mt-4 pb-12">
+        {loading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[1,2,3,4,5,6,7,8].map(i => (
+              <div key={i} className="h-40 bg-[#14120E]/80 border border-[#2C261A] rounded-2xl animate-pulse"></div>
+            ))}
+          </div>
+        ) : categories.length === 0 ? (
+          <div className="text-center py-20 bg-[#14120E]/50 rounded-2xl border border-[#2C261A]">
+            <LayoutGrid className="w-16 h-16 text-[#D4AF37] mx-auto mb-4 opacity-40" />
+            <p className="text-gray-400 text-lg mb-2">Aucune catégorie</p>
+            <p className="text-gray-600 text-sm">Les genres apparaîtront quand les livres seront importés.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {categories.map(cat => (
+              <div
+                key={cat.genre}
+                onClick={() => navigate(`/bibliotheque/livres?genre=${encodeURIComponent(cat.genre)}`)}
+                className={`relative h-40 bg-gradient-to-br ${categoryColors[cat.genre] || defaultColor} backdrop-blur-md border border-[#2C261A] rounded-2xl p-6 cursor-pointer group overflow-hidden shadow-xl hover:shadow-[0_10px_30px_rgba(0,0,0,0.8)] hover:-translate-y-1 transition-all duration-300`}
+              >
+                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-30 transition-opacity">
+                  <LayoutGrid className="w-16 h-16 text-white" />
+                </div>
+                <div className="h-full flex flex-col justify-end relative z-10">
+                  <span className="text-xl font-bold text-white group-hover:text-[#D4AF37] transition-colors">{cat.genre}</span>
+                  <span className="text-sm text-gray-400">{cat.count} livre{cat.count > 1 ? 's' : ''}</span>
+                </div>
               </div>
-              <div className="h-full flex flex-col justify-end relative z-10">
-                <span className="text-xl font-bold text-white group-hover:text-[#D4AF37] transition-colors">{cat.name}</span>
-                <span className="text-sm text-gray-400">{cat.count} livres</span>
-              </div>
-           </div>
-         ))}
+            ))}
+          </div>
+        )}
       </div>
     </PageContainer>
   );
@@ -402,64 +434,175 @@ export const Favoris = () => {
   );
 };
 
-export const Historiques = () => (
-  <PageContainer>
-    <PageHeader icon={Clock} title="Historique" desc="Le fil du temps de vos lectures." />
-    <div className="px-8 mt-4 pb-12">
-       <div className="bg-[#14120E]/80 backdrop-blur-md border border-[#2C261A] rounded-3xl p-8 shadow-2xl relative">
-          <div className="absolute left-12 top-8 bottom-8 w-px bg-gradient-to-b from-[#D4AF37] via-[#D4AF37]/20 to-transparent"></div>
-          
-          <div className="space-y-10 pl-16 pt-4 relative">
-             {[
-               { book: 'Sapiens', action: 'Lecture continuée', page: 'Page 145', time: 'Il y a 2 heures', icon: BookOpen },
-               { book: 'Dune', action: 'Achevé', page: 'Page 890', time: 'Hier', icon: Star },
-               { book: '1984', action: 'Ajouté aux favoris', page: '', time: 'Il y a 3 jours', icon: Star },
-             ].map((evt, i) => (
-               <div key={i} className="relative">
-                 <div className="absolute -left-20 top-0 w-8 h-8 rounded-full bg-[#1C1812] border-2 border-[#D4AF37] flex items-center justify-center shadow-[0_0_10px_rgba(212,175,55,0.5)]">
-                   <evt.icon className="w-3 h-3 text-[#D4AF37]" />
-                 </div>
-                 <div className="bg-[#1A1713] border border-[#2C261A] rounded-xl p-5 hover:border-[#D4AF37]/30 transition-colors">
-                   <div className="flex justify-between items-start mb-2">
-                     <h4 className="text-white font-bold text-lg">{evt.book}</h4>
-                     <span className="text-xs text-gray-500 font-medium">{evt.time}</span>
-                   </div>
-                   <p className="text-gray-400">{evt.action} {evt.page && <span className="text-[#D4AF37] font-bold">— {evt.page}</span>}</p>
-                 </div>
-               </div>
-             ))}
-          </div>
-       </div>
-    </div>
-  </PageContainer>
-);
+export const Historiques = () => {
+  const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
-export const Notes = () => (
+  useEffect(() => {
+    getHistory()
+      .then(setHistory)
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  const getActionLabel = (pct) => {
+    if (pct >= 100) return 'Achevé';
+    if (pct > 0) return 'Lecture continuée';
+    return 'Ouverture';
+  };
+
+  const getActionIcon = (pct) => {
+    if (pct >= 100) return Star;
+    return BookOpen;
+  };
+
+  return (
+    <PageContainer>
+      <PageHeader icon={Clock} title="Historique" desc="Le fil du temps de vos lectures." />
+      <div className="px-8 mt-4 pb-12">
+        {loading ? (
+          <div className="space-y-4">
+            {[1,2,3].map(i => (
+              <div key={i} className="bg-[#14120E]/80 border border-[#2C261A] rounded-2xl p-8 animate-pulse">
+                <div className="h-4 bg-[#2C261A] rounded w-48 mb-4"></div>
+                <div className="h-3 bg-[#2C261A] rounded w-full mb-2"></div>
+                <div className="h-3 bg-[#2C261A] rounded w-3/4"></div>
+              </div>
+            ))}
+          </div>
+        ) : history.length === 0 ? (
+          <div className="text-center py-20 bg-[#14120E]/50 rounded-2xl border border-[#2C261A]">
+            <Clock className="w-16 h-16 text-[#D4AF37] mx-auto mb-4 opacity-40" />
+            <p className="text-gray-400 text-lg mb-2">Aucun historique</p>
+            <p className="text-gray-600 text-sm">Ouvrez un livre dans le lecteur pour voir votre historique.</p>
+          </div>
+        ) : (
+          <div className="bg-[#14120E]/80 backdrop-blur-md border border-[#2C261A] rounded-3xl p-8 shadow-2xl relative">
+            <div className="absolute left-12 top-8 bottom-8 w-px bg-gradient-to-b from-[#D4AF37] via-[#D4AF37]/20 to-transparent"></div>
+            <div className="space-y-10 pl-16 pt-4 relative">
+              {history.map((entry, i) => {
+                const Icon = getActionIcon(entry.progress_percentage);
+                const book = entry.reference;
+                const pageLabel = entry.last_page_read > 0 ? `Page ${entry.last_page_read + 1}` : '';
+                const pctLabel = entry.progress_percentage > 0 ? `${Math.round(entry.progress_percentage)}%` : '';
+                return (
+                  <div key={entry.id} className="relative">
+                    <div className="absolute -left-20 top-0 w-8 h-8 rounded-full bg-[#1C1812] border-2 border-[#D4AF37] flex items-center justify-center shadow-[0_0_10px_rgba(212,175,55,0.5)]">
+                      <Icon className="w-3 h-3 text-[#D4AF37]" />
+                    </div>
+                    <div
+                      onClick={() => book && navigate(`/reader/${book.id}`)}
+                      className="bg-[#1A1713] border border-[#2C261A] rounded-xl p-5 hover:border-[#D4AF37]/30 transition-colors cursor-pointer"
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <h4 className="text-white font-bold text-lg">{book?.titre || 'Livre supprimé'}</h4>
+                        <span className="text-xs text-gray-500 font-medium">{getTimeAgo(entry.updated_at)}</span>
+                      </div>
+                      <p className="text-gray-400">
+                        {getActionLabel(entry.progress_percentage)}
+                        {pageLabel && <span className="text-[#D4AF37] font-bold"> — {pageLabel}</span>}
+                        {pctLabel && <span className="text-gray-500 ml-2">({pctLabel})</span>}
+                      </p>
+                      {book?.auteur && (
+                        <p className="text-xs text-gray-600 mt-1">{book.auteur}</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </PageContainer>
+  );
+};
+
+export const Notes = () => {
+  const [bookmarks, setBookmarks] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getMyBookmarks()
+      .then(setBookmarks)
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleDeleteBookmark = async (id) => {
+    try {
+      await deleteBookmark(id);
+      setBookmarks(prev => prev.filter(b => b.id !== id));
+    } catch {}
+  };
+
+  return (
   <PageContainer>
     <PageHeader icon={FileText} title="Notes & Extraits" desc="Le coffre-fort de vos idées littéraires." />
-    <div className="px-8 mt-4 pb-12 grid grid-cols-1 md:grid-cols-2 gap-6">
-       {[
-         { text: "L'histoire a commencé quand les humains ont inventé les dieux, et se terminera quand ils deviendront des dieux.", book: "Sapiens", date: "12 Mai 2026" },
-         { text: "Celui qui contrôle le passé contrôle l'avenir. Celui qui contrôle le présent contrôle le passé.", book: "1984", date: "05 Avr 2026" },
-         { text: "Je ne dois pas avoir peur. La peur tue l'esprit. La peur est la petite mort qui conduit à l'oblitération totale.", book: "Dune", date: "22 Mar 2026" }
-       ].map((note, i) => (
-         <div key={i} className="bg-[#14120E] border border-[#2C261A] rounded-2xl p-8 shadow-2xl relative group overflow-hidden hover:border-[#D4AF37]/40 transition-colors">
-            <div className="absolute top-0 right-0 -mr-4 -mt-4 text-[120px] text-[#D4AF37]/5 font-serif leading-none select-none">"</div>
-            <p className="font-serif italic text-gray-300 text-lg leading-relaxed relative z-10">
-              "{note.text}"
-            </p>
-            <div className="mt-8 pt-4 border-t border-[#2C261A]/50 flex justify-between items-center relative z-10">
-               <div>
-                 <div className="text-sm text-[#D4AF37] uppercase font-bold tracking-widest">{note.book}</div>
-                 <div className="text-xs text-gray-600 mt-1">{note.date}</div>
-               </div>
-               <button className="text-gray-400 hover:text-white transition-colors p-2"><Edit2 className="w-4 h-4"/></button>
+    <div className="px-8 mt-4 pb-12">
+      {loading ? (
+        <div className="space-y-4">
+          {[1,2,3].map(i => (
+            <div key={i} className="bg-[#14120E]/80 border border-[#2C261A] rounded-2xl p-8 animate-pulse">
+              <div className="h-4 bg-[#2C261A] rounded w-48 mb-4"></div>
+              <div className="h-3 bg-[#2C261A] rounded w-full mb-2"></div>
+              <div className="h-3 bg-[#2C261A] rounded w-3/4"></div>
             </div>
-         </div>
-       ))}
+          ))}
+        </div>
+      ) : bookmarks.length === 0 ? (
+        <div className="text-center py-20 bg-[#14120E]/50 rounded-2xl border border-[#2C261A]">
+          <FileText className="w-16 h-16 text-[#D4AF37] mx-auto mb-4 opacity-40" />
+          <p className="text-gray-400 text-lg mb-2">Aucune note</p>
+          <p className="text-gray-600 text-sm">Ajoutez des marque-pages dans vos livres pour les retrouver ici.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {bookmarks.map(bm => (
+            <div key={bm.id} className="bg-[#14120E] border border-[#2C261A] rounded-2xl p-8 shadow-2xl relative group overflow-hidden hover:border-[#D4AF37]/40 transition-colors">
+              <div className="absolute top-0 right-0 -mr-4 -mt-4 text-[120px] text-[#D4AF37]/5 font-serif leading-none select-none">"</div>
+              {bm.page_text && (
+                <p className="text-gray-400 text-sm leading-relaxed mb-4 line-clamp-4 relative z-10">
+                  {bm.page_text}
+                </p>
+              )}
+              <div className="relative z-10">
+                {bm.note ? (
+                  <p className="font-serif italic text-gray-300 text-lg leading-relaxed">
+                    "{bm.note}"
+                  </p>
+                ) : (
+                  <p className="text-gray-500 text-xs italic">Aucune note</p>
+                )}
+              </div>
+              <div className="mt-6 pt-4 border-t border-[#2C261A]/50 flex justify-between items-center relative z-10">
+                <div>
+                  <div className="text-sm text-[#D4AF37] uppercase font-bold tracking-widest">
+                    {bm.reference?.titre || 'Livre'}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    Page {bm.page_number}
+                    {bm.reference?.auteur && <span className="ml-2">— {bm.reference.auteur}</span>}
+                  </div>
+                  <div className="text-[10px] text-gray-600 mt-1">
+                    {bm.created_at ? new Date(bm.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}
+                  </div>
+                </div>
+                <button onClick={() => handleDeleteBookmark(bm.id)}
+                  className="p-2 rounded-lg transition-all opacity-0 group-hover:opacity-100 hover:bg-red-500/10"
+                  style={{ color: '#ef4444' }}>
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   </PageContainer>
-);
+  );
+};
 
 export const Recommandations = () => (
   <PageContainer>

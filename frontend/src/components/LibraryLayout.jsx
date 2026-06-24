@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { 
   Library, Home, BookOpen, LayoutGrid, Star, Clock, 
-  FileText, Tag, User, Settings, LogOut, Search, Bell, Book, ShieldCheck, X,
+  FileText, Tag, User, Settings, LogOut, Bell, Book, ShieldCheck, X,
   Check, CheckCheck, Loader, BookOpen as BookIcon
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -177,16 +177,7 @@ export default function LibraryLayout() {
       <div className="flex-1 flex flex-col h-screen overflow-hidden relative">
         {/* Top Header */}
         <header className="h-20 flex items-center justify-between px-8 bg-gradient-to-b from-[#0E0C0A] to-transparent absolute top-0 w-full z-30">
-          <div className="relative w-96 group">
-            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-              <Search className="w-4 h-4 text-gray-400 group-focus-within:text-[#D4AF37] transition-colors" />
-            </div>
-            <input
-              type="text"
-              placeholder="Rechercher un livre, auteur, catégorie..."
-              className="w-full bg-[#1C1812]/60 border border-[#2C261A] text-sm text-gray-200 rounded-full pl-11 pr-4 py-2.5 focus:outline-none focus:border-[#D4AF37]/50 focus:bg-[#1C1812] transition-all backdrop-blur-sm"
-            />
-          </div>
+          <div></div>
 
           <div className="flex items-center gap-6">
             {/* Notification Bell */}

@@ -177,6 +177,42 @@ export default function BookReaderPage() {
       .finally(() => setLoading(false));
   }, [id]);
 
+  // Sauvegarder la progression au montage (crée l'entrée dans l'historique)
+  useEffect(() => {
+    if (!id || loading || totalPages === 0) return;
+    const timer = setTimeout(() => {
+      const p = currentPage - 1;
+      const pct = Math.min(100, Math.round((currentPage / totalPages) * 100));
+      updateReadingProgress(id, { last_page_read: p, progress_percentage: pct }).catch(() => {});
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [id, loading, totalPages]);
+
+  // Sauvegarder la progression avant de quitter la page
+  useEffect(() => {
+    if (!id || totalPages === 0) return;
+    const handleBeforeUnload = () => {
+      const p = currentPage - 1;
+      const pct = Math.min(100, Math.round((currentPage / totalPages) * 100));
+      const token = localStorage.getItem('pt16_token');
+      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+      fetch(`${baseUrl}/books/${id}/reading-progress`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        keepalive: true,
+        body: JSON.stringify({ last_page_read: p, progress_percentage: pct }),
+      }).catch(() => {});
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      const p = currentPage - 1;
+      const pct = Math.min(100, Math.round((currentPage / totalPages) * 100));
+      updateReadingProgress(id, { last_page_read: p, progress_percentage: pct }).catch(() => {});
+    };
+  }, [id, currentPage, totalPages]);
+
   const onTurnComplete = useCallback(() => {
     setIsTurning(false);
     const next = Math.min(currentPage + 1, totalPages);
@@ -222,7 +258,11 @@ export default function BookReaderPage() {
     setCurrentPage(p);
     const pct = Math.min(100, Math.round((p / totalPages) * 100));
     setProgress(pct);
-  }, [totalPages]);
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      if (id) updateReadingProgress(id, { last_page_read: p - 1, progress_percentage: pct }).catch(() => {});
+    }, 800);
+  }, [totalPages, id]);
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -237,7 +277,8 @@ export default function BookReaderPage() {
   const handleAddBookmark = async () => {
     if (!id) return;
     try {
-      const bm = await addBookmark(id, { page_number: currentPage, note: '' });
+      const pageText = pages[currentPage - 1] || '';
+      const bm = await addBookmark(id, { page_number: currentPage, note: '', page_text: pageText });
       setBookmarks(prev => [...prev, bm].sort((a, b) => a.page_number - b.page_number));
     } catch {}
   };

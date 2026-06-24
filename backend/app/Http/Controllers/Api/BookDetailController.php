@@ -152,6 +152,7 @@ class BookDetailController extends Controller
         $request->validate([
             'page_number' => 'required|integer|min:1',
             'note' => 'nullable|string|max:500',
+            'page_text' => 'nullable|string|max:10000',
         ]);
 
         $bookmark = Bookmark::create([
@@ -159,6 +160,7 @@ class BookDetailController extends Controller
             'reference_id' => $id,
             'page_number' => $request->page_number,
             'note' => $request->note,
+            'page_text' => $request->page_text,
         ]);
 
         return response()->json($bookmark, 201);
@@ -173,6 +175,16 @@ class BookDetailController extends Controller
         $bookmark->delete();
 
         return response()->json(['message' => 'Marque-page supprimé.']);
+    }
+
+    public function getMyBookmarks()
+    {
+        $bookmarks = Bookmark::where('utilisateur_id', Auth::id())
+            ->with('reference:id,titre,auteur,cover_image')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return response()->json($bookmarks);
     }
 
     public function getNotes($id)
@@ -233,6 +245,35 @@ class BookDetailController extends Controller
         $progress->update(['notes' => json_encode($notes)]);
 
         return response()->json(['message' => 'Note supprimée.']);
+    }
+
+    public function getHistory()
+    {
+        $history = HistoriqueLecture::where('utilisateur_id', Auth::id())
+            ->with('reference:id,titre,auteur,cover_image')
+            ->orderBy('updated_at', 'desc')
+            ->get();
+
+        $history->transform(function ($h) {
+            if ($h->reference && $h->reference->cover_image && !str_starts_with($h->reference->cover_image, 'http')) {
+                $h->reference->cover_image = url('storage/' . $h->reference->cover_image);
+            }
+            return $h;
+        });
+
+        return response()->json($history);
+    }
+
+    public function getCategories()
+    {
+        $categories = Reference::where('type', 'livre')
+            ->whereNotNull('genre')
+            ->selectRaw('genre, COUNT(*) as count')
+            ->groupBy('genre')
+            ->orderBy('count', 'desc')
+            ->get();
+
+        return response()->json($categories);
     }
 
     public function getAvis($id)

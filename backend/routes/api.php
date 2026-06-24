@@ -63,11 +63,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/books/{id}/notes', [BookDetailController::class, 'addNote']);
     Route::delete('/books/{id}/notes/{noteId}', [BookDetailController::class, 'deleteNote']);
 
+    // Tous mes marque-pages (pour la page Notes)
+    Route::get('/bookmarks/mine', [BookDetailController::class, 'getMyBookmarks']);
+
     // Avis / Commentaires
     Route::get('/books/{id}/avis', [BookDetailController::class, 'getAvis']);
     Route::post('/books/{id}/avis', [BookDetailController::class, 'addAvis']);
 
-    // Favoris
+    // Catégories / Genres
+    Route::get('/categories', [BookDetailController::class, 'getCategories']);
+    Route::get('/history', [BookDetailController::class, 'getHistory']);
     Route::get('/favoris', [BookDetailController::class, 'getFavoris']);
     Route::get('/books/{id}/is-favori', [BookDetailController::class, 'isFavori']);
     Route::post('/books/{id}/favori', [BookDetailController::class, 'addFavori']);

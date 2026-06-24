@@ -95,6 +95,16 @@ export const deleteBookmark = async (bookmarkId) => {
     return data;
 };
 
+export const getMyBookmarks = async () => {
+    const { data } = await client.get('/bookmarks/mine');
+    return data;
+};
+
+export const getCategories = async () => {
+    const { data } = await client.get('/categories');
+    return data;
+};
+
 export const getFavoris = async () => {
     const { data } = await client.get('/favoris');
     return data;
@@ -112,6 +122,11 @@ export const removeFavori = async (id) => {
 
 export const getMyReservations = async () => {
     const { data } = await client.get('/reservations/mine');
+    return data;
+};
+
+export const getHistory = async () => {
+    const { data } = await client.get('/history');
     return data;
 };
 
